@@ -487,6 +487,7 @@
       <select class="month-field" id="monthSelect"></select>
       <button class="io-btn ms-btn" id="signInBtn" title="Sign in with Microsoft to auto-sync via OneDrive">☁ Sign in with Microsoft</button>
       <span class="sync-status" id="syncStatus"></span>
+      <button class="io-btn" id="folderBtn" title="Choose a folder — Export/Import will use it automatically from now on">📁 Set folder</button>
       <button class="io-btn" id="exportBtn" title="Download your data as a .json file — save it in OneDrive to sync across devices">⬇ Export</button>
       <button class="io-btn" id="importBtn" title="Import a previously exported .json file">⬆ Import</button>
       <input type="file" id="importFile" accept="application/json,.json" style="display:none">
@@ -903,40 +904,163 @@ function scheduleOneDriveSave(){
   }, 900);
 }
 
-/* ---------- export / import (manual sync via OneDrive, Google Drive, email, etc.) ---------- */
-function exportData(){
-  const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
+/* ---------- export / import (manual sync via OneDrive, Google Drive, email, etc.) ----------
+   On Chrome/Edge desktop, we can remember a specific local folder (e.g. a
+   OneDrive-synced folder) so Export/Import use it automatically with no
+   dialog after the first time. Safari and mobile browsers don't support
+   this, so they transparently fall back to normal download/file-picker. */
+const FS_SUPPORTED = 'showDirectoryPicker' in window;
+let exportDirHandle = null;
+
+function idbOpen(){
+  return new Promise((resolve,reject)=>{
+    const req = indexedDB.open('household-ledger-fs', 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('handles');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbGet(key){
+  const db = await idbOpen();
+  return new Promise((resolve,reject)=>{
+    const req = db.transaction('handles','readonly').objectStore('handles').get(key);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbSet(key, val){
+  const db = await idbOpen();
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction('handles','readwrite');
+    tx.objectStore('handles').put(val, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+async function idbDelete(key){
+  const db = await idbOpen();
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction('handles','readwrite');
+    tx.objectStore('handles').delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+async function ensureDirPermission(handle){
+  const opts = { mode: 'readwrite' };
+  if((await handle.queryPermission(opts)) === 'granted') return true;
+  if((await handle.requestPermission(opts)) === 'granted') return true;
+  return false;
+}
+function updateFolderUI(){
+  const btn = document.getElementById('folderBtn');
+  if(!btn) return;
+  if(!FS_SUPPORTED){ btn.style.display = 'none'; return; }
+  btn.textContent = exportDirHandle ? `📁 ${exportDirHandle.name}` : '📁 Set folder';
+  btn.title = exportDirHandle
+    ? `Export/Import automatically use "${exportDirHandle.name}". Click to change.`
+    : 'Choose a folder — Export/Import will use it automatically from now on';
+}
+async function chooseExportFolder(){
+  try{
+    const handle = await window.showDirectoryPicker();
+    await idbSet('exportDir', handle);
+    exportDirHandle = handle;
+    updateFolderUI();
+  }catch(e){
+    if(e.name !== 'AbortError') console.error(e);
+  }
+}
+async function initFolderHandle(){
+  if(!FS_SUPPORTED) return;
+  try{
+    const handle = await idbGet('exportDir');
+    if(handle && (await ensureDirPermission(handle))) exportDirHandle = handle;
+  }catch(e){ console.error(e); }
+  updateFolderUI();
+}
+
+async function exportData(){
+  const filename = `household-ledger-${new Date().toISOString().slice(0,10)}.json`;
+  const json = JSON.stringify(state, null, 2);
+
+  if(FS_SUPPORTED){
+    if(!exportDirHandle){
+      await chooseExportFolder();
+      if(!exportDirHandle) return; // user cancelled the picker
+    }
+    try{
+      if(!(await ensureDirPermission(exportDirHandle))) throw new Error('Permission denied');
+      const fileHandle = await exportDirHandle.getFileHandle(filename, { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(json);
+      await writable.close();
+      const txt = document.getElementById('saveText');
+      if(txt){ const prev = txt.textContent; txt.textContent = `saved to ${exportDirHandle.name}/`; setTimeout(()=>{ txt.textContent = prev; }, 2500); }
+      return;
+    }catch(e){
+      console.error(e);
+      alert(`Could not save to "${exportDirHandle.name}" — falling back to a normal download.`);
+      // fall through to the plain download below
+    }
+  }
+
+  const blob = new Blob([json], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  const today = new Date().toISOString().slice(0,10);
   a.href = url;
-  a.download = `household-ledger-${today}.json`;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
 
+function loadImportedText(text){
+  try{
+    const parsed = JSON.parse(text);
+    if(!parsed || !parsed.wife || !parsed.adli || !parsed.shared){
+      alert("This file isn't valid — not a Household Ledger export file.");
+      return;
+    }
+    if(!confirm('This will REPLACE all current data with the data from this file. Continue?')) return;
+    state = ensureStateDefaults(parsed);
+    document.getElementById('pageTitle').value = state.title || 'Household Ledger';
+    document.title = state.title || 'Household Ledger';
+    render();
+    alert('Data imported successfully.');
+  }catch(err){
+    alert("Couldn't read this file. Make sure it's a .json file exported from Household Ledger.");
+    console.error(err);
+  }
+}
+
+async function findLatestJsonFile(dirHandle){
+  let latest = null, latestTime = -1;
+  for await (const [name, handle] of dirHandle.entries()){
+    if(handle.kind === 'file' && name.toLowerCase().endsWith('.json')){
+      const file = await handle.getFile();
+      if(file.lastModified > latestTime){ latestTime = file.lastModified; latest = file; }
+    }
+  }
+  return latest;
+}
+
+async function importLatestFromFolder(){
+  try{
+    if(!(await ensureDirPermission(exportDirHandle))){ alert('Permission to the folder was denied.'); return; }
+    const latest = await findLatestJsonFile(exportDirHandle);
+    if(!latest){ alert(`No .json files found in "${exportDirHandle.name}".`); return; }
+    loadImportedText(await latest.text());
+  }catch(e){
+    console.error(e);
+    alert('Could not read from the folder.');
+  }
+}
+
 function importData(file){
   const reader = new FileReader();
-  reader.onload = e=>{
-    try{
-      const parsed = JSON.parse(e.target.result);
-      if(!parsed || !parsed.wife || !parsed.adli || !parsed.shared){
-        alert('This file isn\'t valid — not a Household Ledger export file.');
-        return;
-      }
-      if(!confirm('This will REPLACE all current data with the data from this file. Continue?')) return;
-      state = ensureStateDefaults(parsed);
-      document.getElementById('pageTitle').value = state.title || 'Household Ledger';
-      document.title = state.title || 'Household Ledger';
-      render();
-      alert('Data imported successfully.');
-    }catch(err){
-      alert("Couldn't read this file. Make sure it's a .json file exported from Household Ledger.");
-      console.error(err);
-    }
-  };
+  reader.onload = e => loadImportedText(e.target.result);
   reader.readAsText(file);
 }
 
@@ -1544,8 +1668,11 @@ function initStickyCompact(){
   initDragReorder();
   initStickyCompact();
   initOneDrive();
+  initFolderHandle();
+  document.getElementById('folderBtn').addEventListener('click', chooseExportFolder);
   document.getElementById('exportBtn').addEventListener('click', exportData);
   document.getElementById('importBtn').addEventListener('click', ()=>{
+    if(FS_SUPPORTED && exportDirHandle){ importLatestFromFolder(); return; }
     document.getElementById('importFile').click();
   });
   document.getElementById('importFile').addEventListener('change', e=>{
