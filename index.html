@@ -255,9 +255,12 @@
   /* Person sections */
   #peopleWrap{
     display:grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap:16px;
     align-items:start;
+  }
+  @media (max-width:900px){
+    #peopleWrap{grid-template-columns: 1fr;}
   }
   .person{
     background:var(--card);
@@ -1289,7 +1292,7 @@ function sharedHTML(colIdx){
     <div class="person-head">
       <span class="drag-handle col-drag" draggable="true" data-list="columns" data-index="${colIdx}" title="Drag to reorder columns">⠿</span>
       <h2><div contenteditable="true" data-field="sharedLabel" class="label-edit">${escapeHtml(s.label)}</div></h2>
-      <span class="stamp" id="sharedStamp">shared by ${escapeHtml(state.wife.label)} / ${escapeHtml(state.adli.label)}</span>
+      <span class="stamp" id="sharedStamp">${escapeHtml(state.wife.label)} / ${escapeHtml(state.adli.label)}</span>
     </div>
     <div class="person-body">
       ${s.groups.map((g,gIdx)=>{
@@ -1381,7 +1384,7 @@ function attachEvents(){
       const label = el.textContent || (personKey==='wife'?'Ummi':'Ayah');
       wrap.querySelectorAll(`.covered-toggle button[data-cover="${personKey}"]`).forEach(btn=>{ btn.textContent = label; });
       const stampEl = document.getElementById('sharedStamp');
-      if(stampEl) stampEl.textContent = `shared by ${state.wife.label} / ${state.adli.label}`;
+      if(stampEl) stampEl.textContent = `${state.wife.label} / ${state.adli.label}`;
       renderFootnote();
       scheduleSave();
     });
