@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://alcdn.msauth.net/browser/3.7.1/js/msal-browser.min.js"></script>
 <style>
   :root{
     --ink:#1B2A4A;
@@ -44,19 +45,20 @@
     border-bottom:2px solid var(--ink);
     padding-bottom:16px;margin-bottom:22px;
   }
-  .masthead .title-col{flex:1;min-width:200px;}
+  .masthead .title-col{flex:1 1 100%;min-width:0;}
   .title-field{
     font-family:'Fraunces',serif;
     font-weight:600;
-    font-size:clamp(26px,4vw,40px);
+    font-size:clamp(22px,4vw,40px);
     margin:0;
     letter-spacing:-0.01em;
     border:none;background:transparent;color:var(--ink);
     padding:2px 0;width:100%;min-width:0;
+    overflow:hidden;text-overflow:ellipsis;
   }
   .title-field:focus{outline:none;border-bottom:2px dashed var(--gold);}
   .masthead .sub{
-    font-size:12px;color:var(--ink-soft);margin-top:4px;
+    font-size:10.5px;color:var(--ink-soft);margin-top:4px;
     font-family:'IBM Plex Mono',monospace;
     text-transform:uppercase;letter-spacing:.03em;
   }
@@ -66,9 +68,14 @@
     background:var(--card);
     border:1px solid var(--paper-line);
     border-radius:8px;
-    padding:8px 12px;
+    padding:8px 28px 8px 12px;
     color:var(--ink);
     min-width:12ch;
+    max-width:180px;
+    cursor:pointer;
+    -webkit-appearance:none;-moz-appearance:none;appearance:none;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M0 0L5 6L10 0Z' fill='%234A5573'/></svg>");
+    background-repeat:no-repeat;background-position:right 10px center;
   }
   .masthead-actions{
     display:flex;align-items:center;gap:10px;flex-wrap:wrap;
@@ -79,6 +86,19 @@
     padding:8px 12px;color:var(--ink-soft);cursor:pointer;white-space:nowrap;
   }
   .io-btn:hover{border-color:var(--gold);color:var(--amber);}
+  .ms-btn{
+    background:var(--ink);color:var(--paper);border-color:var(--ink);
+  }
+  .ms-btn:hover{background:#2A3F6B;color:var(--paper);border-color:#2A3F6B;}
+  .ms-btn.signed-in{background:var(--sage-bg);color:var(--sage);border-color:var(--sage-bg);}
+  .sync-status{
+    font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-soft);
+    display:flex;align-items:center;gap:5px;white-space:nowrap;
+  }
+  .sync-dot{width:6px;height:6px;border-radius:50%;background:var(--paper-line);flex-shrink:0;}
+  .sync-dot.ok{background:var(--sage);}
+  .sync-dot.busy{background:var(--amber);}
+  .sync-dot.err{background:var(--brick);}
   .save-indicator{
     font-size:12px;color:var(--ink-soft);
     font-family:'IBM Plex Mono',monospace;
@@ -461,10 +481,12 @@
   <div class="masthead">
     <div class="title-col">
       <input class="title-field" id="pageTitle" value="Household Ledger">
-      <div class="sub">salary &amp; monthly commitments — always saved automatically</div>
+      <div class="sub">household budget · auto-saved</div>
     </div>
     <div class="masthead-actions">
-      <input class="month-field" id="monthLabel" value="July 2026">
+      <select class="month-field" id="monthSelect"></select>
+      <button class="io-btn ms-btn" id="signInBtn" title="Sign in with Microsoft to auto-sync via OneDrive">☁ Sign in with Microsoft</button>
+      <span class="sync-status" id="syncStatus"></span>
       <button class="io-btn" id="exportBtn" title="Download your data as a .json file — save it in OneDrive to sync across devices">⬇ Export</button>
       <button class="io-btn" id="importBtn" title="Import a previously exported .json file">⬆ Import</button>
       <input type="file" id="importFile" accept="application/json,.json" style="display:none">
@@ -489,7 +511,7 @@
 /* ---------- data model ---------- */
 const uid = () => Math.random().toString(36).slice(2,9);
 
-const defaultData = () => ({
+const defaultData = () => { const d = {
   wife: {
     label: "Ummi",
     income: [
@@ -601,7 +623,90 @@ const defaultData = () => ({
   },
   statusOptions: ["Paid","Transferred","Pending"],
   columnOrder: ["wife","shared","adli"],
-});
+  title: "Household Ledger",
+}; d.currentMonth = "July 2026"; d.monthOrder = ["July 2026"];
+  d.months = { "July 2026": { wife: d.wife, adli: d.adli, shared: d.shared } };
+  return d;
+};
+
+/* ---------- monthly history ----------
+   Each month is its own snapshot (wife/adli/shared). Switching to an
+   existing month loads that snapshot. Switching to a brand-new month
+   clones the current month's categories/items as a starting template,
+   but resets every item's status back to the first status option
+   (e.g. "Pending") since nothing's been paid yet in the new month. */
+function cloneDeep(obj){ return JSON.parse(JSON.stringify(obj)); }
+
+function findFreshStatus(){
+  const opts = (state && state.statusOptions) || ['Pending'];
+  const pending = opts.find(s => /pending|unpaid|due|belum/i.test(s));
+  return pending || opts[opts.length-1] || 'Pending';
+}
+
+function regenerateIds(monthData){
+  const fresh = cloneDeep(monthData);
+  const freshStatus = findFreshStatus();
+  const resetItem = it => { it.id = uid(); it.status = freshStatus; };
+  ['wife','adli'].forEach(who=>{
+    fresh[who].income.forEach(inc=>{ inc.id = uid(); });
+    fresh[who].categories.forEach(cat=>{ cat.id = uid(); cat.items.forEach(resetItem); });
+  });
+  fresh.shared.groups.forEach(g=>{ g.id = uid(); g.items.forEach(resetItem); });
+  return fresh;
+}
+
+function switchMonth(newMonth){
+  newMonth = (newMonth||'').trim();
+  if(!newMonth || newMonth === state.currentMonth) { renderMonthSelect(); return; }
+  // mirror the month we're leaving so nothing gets lost
+  state.months[state.currentMonth] = { wife: state.wife, adli: state.adli, shared: state.shared };
+  if(state.months[newMonth]){
+    const snap = cloneDeep(state.months[newMonth]);
+    state.wife = snap.wife; state.adli = snap.adli; state.shared = snap.shared;
+  } else {
+    const fresh = regenerateIds({ wife: state.wife, adli: state.adli, shared: state.shared });
+    state.wife = fresh.wife; state.adli = fresh.adli; state.shared = fresh.shared;
+    state.months[newMonth] = { wife: state.wife, adli: state.adli, shared: state.shared };
+    if(!state.monthOrder.includes(newMonth)) state.monthOrder.push(newMonth);
+  }
+  state.currentMonth = newMonth;
+  render();
+}
+
+function renderMonthSelect(){
+  const el = document.getElementById('monthSelect');
+  if(!el) return;
+  el.innerHTML = state.monthOrder.map(m=>
+    `<option value="${escapeHtml(m)}" ${m===state.currentMonth?'selected':''}>${escapeHtml(m)}</option>`
+  ).join('') + `<option value="__new__">+ New month…</option>`;
+}
+
+function attachMonthSelect(){
+  const el = document.getElementById('monthSelect');
+  el.addEventListener('change', ()=>{
+    if(el.value === '__new__'){
+      const name = (prompt('Name the new month (e.g. "August 2026"):')||'').trim();
+      if(name) switchMonth(name);
+      else renderMonthSelect(); // revert dropdown back to current month
+      return;
+    }
+    switchMonth(el.value);
+  });
+}
+
+function ensureStateDefaults(s){
+  if(!s.statusOptions) s.statusOptions = ["Paid","Transferred","Pending"];
+  if(!s.columnOrder || !Array.isArray(s.columnOrder) || s.columnOrder.length!==3) s.columnOrder = ["wife","shared","adli"];
+  if(!s.title) s.title = 'Household Ledger';
+  if(!s.currentMonth){
+    // migrating an older save that had no month history yet
+    s.currentMonth = s.monthLabel || 'July 2026';
+  }
+  if(!s.monthOrder || !Array.isArray(s.monthOrder) || !s.monthOrder.length) s.monthOrder = [s.currentMonth];
+  if(!s.months) s.months = {};
+  if(!s.months[s.currentMonth]) s.months[s.currentMonth] = { wife: s.wife, adli: s.adli, shared: s.shared };
+  return s;
+}
 
 let state = null;
 const STORAGE_KEY = "duit-rumah-v1";
@@ -623,6 +728,9 @@ function scheduleSave(){
   clearTimeout(saveTimer);
   saveTimer = setTimeout(()=>{
     try{
+      if(state.currentMonth){
+        state.months[state.currentMonth] = { wife: state.wife, adli: state.adli, shared: state.shared };
+      }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       dot.style.opacity='1';
       txt.textContent='saved on this device';
@@ -630,7 +738,169 @@ function scheduleSave(){
       txt.textContent='save failed';
       console.error(e);
     }
+    scheduleOneDriveSave();
   }, 400);
+}
+
+/* ---------- OneDrive auto-sync (Microsoft sign-in + Graph API) ----------
+   To enable: paste your Azure app's Client ID below. Until then, the
+   Sign in button stays disabled and everything just works off localStorage. */
+const MS_CLIENT_ID = "PASTE_YOUR_CLIENT_ID_HERE";
+const GRAPH_FILE_PATH = "household-ledger-data.json"; // lives in OneDrive/Apps/Household Ledger/
+const MS_CONFIGURED = MS_CLIENT_ID && MS_CLIENT_ID.indexOf("PASTE_YOUR") !== 0;
+
+let msalInstance = null;
+let msalAccount = null;
+let odSaveTimer = null;
+let odSyncing = false;
+
+function setSyncStatus(state_, text){
+  const el = document.getElementById('syncStatus');
+  if(!el) return;
+  el.innerHTML = `<span class="sync-dot ${state_}"></span><span>${escapeHtml(text)}</span>`;
+}
+
+function initOneDrive(){
+  if(!MS_CONFIGURED){
+    const btn = document.getElementById('signInBtn');
+    btn.disabled = true;
+    btn.style.opacity = '0.4';
+    btn.style.cursor = 'not-allowed';
+    btn.title = 'OneDrive sync not configured yet — see setup instructions';
+    return;
+  }
+  if(typeof msal === 'undefined'){
+    console.error('MSAL library failed to load — check internet connection and try refreshing.');
+    setSyncStatus('err', 'Sign-in unavailable (offline?)');
+    document.getElementById('signInBtn').disabled = true;
+    return;
+  }
+  msalInstance = new msal.PublicClientApplication({
+    auth: {
+      clientId: MS_CLIENT_ID,
+      authority: "https://login.microsoftonline.com/consumers",
+      redirectUri: window.location.origin + window.location.pathname,
+    },
+    cache: { cacheLocation: "localStorage" }
+  });
+
+  const btn = document.getElementById('signInBtn');
+  btn.addEventListener('click', ()=>{
+    if(msalAccount) signOutOneDrive();
+    else signInOneDrive();
+  });
+
+  const existing = msalInstance.getAllAccounts();
+  if(existing.length){
+    msalAccount = existing[0];
+    onSignedIn();
+  } else {
+    setSyncStatus('', 'Not signed in — saving to this device only');
+  }
+}
+
+async function signInOneDrive(){
+  try{
+    setSyncStatus('busy', 'Signing in…');
+    const result = await msalInstance.loginPopup({ scopes: ["Files.ReadWrite.AppFolder"] });
+    msalAccount = result.account;
+    await onSignedIn();
+  }catch(e){
+    console.error(e);
+    setSyncStatus('err', 'Sign-in failed');
+  }
+}
+
+function signOutOneDrive(){
+  const account = msalAccount;
+  msalAccount = null;
+  updateSignInButton();
+  setSyncStatus('', 'Not signed in — saving to this device only');
+  if(account) msalInstance.logoutPopup({ account }).catch(()=>{});
+}
+
+function updateSignInButton(){
+  const btn = document.getElementById('signInBtn');
+  if(msalAccount){
+    btn.textContent = `☁ ${msalAccount.username}`;
+    btn.classList.add('signed-in');
+    btn.title = 'Signed in — click to sign out';
+  } else {
+    btn.textContent = '☁ Sign in with Microsoft';
+    btn.classList.remove('signed-in');
+    btn.title = 'Sign in with Microsoft to auto-sync via OneDrive';
+  }
+}
+
+async function getGraphToken(){
+  try{
+    const result = await msalInstance.acquireTokenSilent({
+      scopes: ["Files.ReadWrite.AppFolder"], account: msalAccount
+    });
+    return result.accessToken;
+  }catch(e){
+    const result = await msalInstance.acquireTokenPopup({ scopes: ["Files.ReadWrite.AppFolder"] });
+    return result.accessToken;
+  }
+}
+
+async function onSignedIn(){
+  updateSignInButton();
+  setSyncStatus('busy', 'Checking OneDrive…');
+  try{
+    const remote = await loadFromOneDrive();
+    if(remote){
+      // Remote copy exists — it's the shared source of truth, adopt it.
+      state = ensureStateDefaults(remote);
+      document.getElementById('pageTitle').value = state.title || 'Household Ledger';
+      document.title = state.title || 'Household Ledger';
+      render();
+      setSyncStatus('ok', 'Synced with OneDrive');
+    } else {
+      // No remote file yet — push what we have now to create it.
+      await saveToOneDrive();
+      setSyncStatus('ok', 'Synced with OneDrive');
+    }
+  }catch(e){
+    console.error(e);
+    setSyncStatus('err', 'Could not reach OneDrive');
+  }
+}
+
+async function loadFromOneDrive(){
+  const token = await getGraphToken();
+  const res = await fetch(`https://graph.microsoft.com/v1.0/me/drive/special/approot:/${GRAPH_FILE_PATH}:/content`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if(res.status === 404) return null;
+  if(!res.ok) throw new Error('Graph GET failed: ' + res.status);
+  return await res.json();
+}
+
+async function saveToOneDrive(){
+  if(!msalAccount) return;
+  const token = await getGraphToken();
+  const res = await fetch(`https://graph.microsoft.com/v1.0/me/drive/special/approot:/${GRAPH_FILE_PATH}:/content`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(state)
+  });
+  if(!res.ok) throw new Error('Graph PUT failed: ' + res.status);
+}
+
+function scheduleOneDriveSave(){
+  if(!msalAccount || !MS_CONFIGURED) return;
+  clearTimeout(odSaveTimer);
+  setSyncStatus('busy', 'Syncing…');
+  odSaveTimer = setTimeout(async ()=>{
+    try{
+      await saveToOneDrive();
+      setSyncStatus('ok', 'Synced with OneDrive');
+    }catch(e){
+      console.error(e);
+      setSyncStatus('err', 'Sync failed — will retry on next change');
+    }
+  }, 900);
 }
 
 /* ---------- export / import (manual sync via OneDrive, Google Drive, email, etc.) ---------- */
@@ -657,10 +927,7 @@ function importData(file){
         return;
       }
       if(!confirm('This will REPLACE all current data with the data from this file. Continue?')) return;
-      state = parsed;
-      if(!state.statusOptions) state.statusOptions = ["Paid","Transferred","Pending"];
-      if(!state.columnOrder || !Array.isArray(state.columnOrder) || state.columnOrder.length!==3) state.columnOrder = ["wife","shared","adli"];
-      document.getElementById('monthLabel').value = state.monthLabel || '';
+      state = ensureStateDefaults(parsed);
       document.getElementById('pageTitle').value = state.title || 'Household Ledger';
       document.title = state.title || 'Household Ledger';
       render();
@@ -704,6 +971,7 @@ function calcTotals(){
 function render(){
   renderSummary();
   renderTotalsBar();
+  renderMonthSelect();
   renderStatusManager();
   renderPeople();
   renderFootnote();
@@ -772,7 +1040,7 @@ function renderSummary(){
       <div class="sum-card household">
         <div class="who">Total Household Balance</div>
         <div class="amt ${(t.wifeBalance+t.adliBalance)<0?'neg':''}">RM ${money(t.wifeBalance+t.adliBalance)}</div>
-        <div class="breakdown"><span>Joint commitments RM ${money(t.sharedTotal)}</span><span>${escapeHtml(state.monthLabel||'')}</span></div>
+        <div class="breakdown"><span>Joint commitments RM ${money(t.sharedTotal)}</span><span>${escapeHtml(state.currentMonth||'')}</span></div>
       </div>`,
     adli: `
       <div class="sum-card">
@@ -1238,14 +1506,6 @@ function initDragReorder(){
 }
 
 /* ---------- month & title labels ---------- */
-function attachMonthField(){
-  const el = document.getElementById('monthLabel');
-  el.addEventListener('input', ()=>{
-    state.monthLabel = el.value;
-    renderSummary();
-    scheduleSave();
-  });
-}
 function attachTitleField(){
   const el = document.getElementById('pageTitle');
   el.addEventListener('input', ()=>{
@@ -1276,18 +1536,14 @@ function initStickyCompact(){
 /* ---------- init ---------- */
 (async function init(){
   const saved = await loadState();
-  state = saved || defaultData();
-  if(!state.monthLabel) state.monthLabel = document.getElementById('monthLabel').value;
-  if(!state.title) state.title = document.getElementById('pageTitle').value;
-  if(!state.statusOptions) state.statusOptions = ["Paid","Transferred","Pending"];
-  if(!state.columnOrder || !Array.isArray(state.columnOrder) || state.columnOrder.length!==3) state.columnOrder = ["wife","shared","adli"];
-  document.getElementById('monthLabel').value = state.monthLabel;
+  state = ensureStateDefaults(saved || defaultData());
   document.getElementById('pageTitle').value = state.title;
   document.title = state.title || 'Household Ledger';
-  attachMonthField();
   attachTitleField();
+  attachMonthSelect();
   initDragReorder();
   initStickyCompact();
+  initOneDrive();
   document.getElementById('exportBtn').addEventListener('click', exportData);
   document.getElementById('importBtn').addEventListener('click', ()=>{
     document.getElementById('importFile').click();
