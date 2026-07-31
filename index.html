@@ -1,0 +1,1304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Household Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#1B2A4A;
+    --ink-soft:#4A5573;
+    --paper:#FBF8F2;
+    --paper-line:#E7E0D2;
+    --card:#FFFFFF;
+    --sage:#5F8863;
+    --sage-bg:#E8F0E6;
+    --amber:#B8842E;
+    --amber-bg:#FBF0DC;
+    --brick:#B0503F;
+    --brick-bg:#F7E7E2;
+    --navy-tab:#1B2A4A;
+    --gold:#C9A24B;
+    --shadow: 0 1px 2px rgba(27,42,74,0.06), 0 6px 20px rgba(27,42,74,0.06);
+  }
+  *{box-sizing:border-box;}
+  html{-webkit-text-size-adjust:100%;text-size-adjust:100%;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(circle at 1px 1px, var(--paper-line) 1px, transparent 1px) 0 0/28px 28px,
+      var(--paper);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    padding:28px 16px 80px;
+  }
+  .wrap{max-width:1080px;margin:0 auto;}
+
+  /* Header */
+  .masthead{
+    display:flex;justify-content:space-between;align-items:flex-end;
+    flex-wrap:wrap;gap:14px;
+    border-bottom:2px solid var(--ink);
+    padding-bottom:16px;margin-bottom:22px;
+  }
+  .masthead .title-col{flex:1;min-width:200px;}
+  .title-field{
+    font-family:'Fraunces',serif;
+    font-weight:600;
+    font-size:clamp(26px,4vw,40px);
+    margin:0;
+    letter-spacing:-0.01em;
+    border:none;background:transparent;color:var(--ink);
+    padding:2px 0;width:100%;min-width:0;
+  }
+  .title-field:focus{outline:none;border-bottom:2px dashed var(--gold);}
+  .masthead .sub{
+    font-size:12px;color:var(--ink-soft);margin-top:4px;
+    font-family:'IBM Plex Mono',monospace;
+    text-transform:uppercase;letter-spacing:.03em;
+  }
+  .month-field{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:13px;
+    background:var(--card);
+    border:1px solid var(--paper-line);
+    border-radius:8px;
+    padding:8px 12px;
+    color:var(--ink);
+    min-width:12ch;
+  }
+  .masthead-actions{
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  }
+  .io-btn{
+    font-family:'IBM Plex Mono',monospace;font-size:12px;
+    border:1px solid var(--paper-line);background:var(--card);border-radius:8px;
+    padding:8px 12px;color:var(--ink-soft);cursor:pointer;white-space:nowrap;
+  }
+  .io-btn:hover{border-color:var(--gold);color:var(--amber);}
+  .save-indicator{
+    font-size:12px;color:var(--ink-soft);
+    font-family:'IBM Plex Mono',monospace;
+    display:flex;align-items:center;gap:6px;
+  }
+  .save-dot{width:6px;height:6px;border-radius:50%;background:var(--sage);transition:opacity .3s;}
+
+  /* Sticky header wrapper (summary cards + totals bar) */
+  .sticky-header{
+    position:sticky;top:0;z-index:30;
+    background:
+      radial-gradient(circle at 1px 1px, var(--paper-line) 1px, transparent 1px) 0 0/28px 28px,
+      var(--paper);
+    padding-top:12px;margin-top:-12px;
+    padding-bottom:14px;margin-bottom:14px;
+  }
+  .sticky-header::after{
+    content:'';position:absolute;left:0;right:0;bottom:0;height:1px;
+    background:linear-gradient(to right, transparent, var(--paper-line) 15%, var(--paper-line) 85%, transparent);
+  }
+  @media (max-width:768px){
+    .sticky-header{
+      position:static;top:auto;
+      padding-top:0;margin-top:0;
+      padding-bottom:0;margin-bottom:22px;
+      background:none;
+    }
+    .sticky-header::after{content:none;}
+  }
+
+  /* Summary strip */
+  .summary{
+    display:grid;grid-template-columns:repeat(auto-fit, minmax(230px, 1fr));gap:14px;
+  }
+  .sum-card{
+    background:var(--ink);
+    color:var(--paper);
+    border-radius:14px;
+    padding:20px 22px;
+    position:relative;
+    overflow:hidden;
+    box-shadow:var(--shadow);
+    transition:padding .18s ease;
+  }
+  .sum-card::before{
+    content:'';position:absolute;top:0;left:0;right:0;height:3px;
+    background:var(--gold);
+  }
+  .sum-card .who{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px;letter-spacing:.12em;text-transform:uppercase;
+    opacity:.65;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .sum-card .amt{
+    font-family:'Fraunces',serif;
+    font-size:clamp(22px,3vw,30px);
+    font-weight:600;
+    margin:6px 0 2px;
+    font-variant-numeric: tabular-nums;
+    white-space:nowrap;
+    transition:font-size .18s ease, margin .18s ease;
+  }
+  .sum-card .amt.neg{color:#E8A28E;}
+  .sum-card .breakdown{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:10.5px;opacity:.72;margin-top:8px;
+    display:flex;justify-content:space-between;gap:10px;
+    white-space:nowrap;
+    transition:opacity .15s ease, max-height .15s ease, margin .15s ease;
+    max-height:20px;overflow:hidden;
+  }
+  .sum-card .breakdown span{
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;
+  }
+  .sum-card.household{background:linear-gradient(135deg,#2A3F6B,#1B2A4A);}
+
+  /* Compact sticky state while scrolled */
+  .sticky-header.stuck{padding-top:8px;padding-bottom:8px;}
+  .sticky-header.stuck .sum-card{padding:10px 18px;}
+  .sticky-header.stuck .sum-card .who{font-size:9.5px;}
+  .sticky-header.stuck .sum-card .amt{font-size:18px;margin:3px 0 0;}
+  .sticky-header.stuck .sum-card .breakdown{max-height:0;opacity:0;margin-top:0;}
+  .sticky-header.stuck .totals-bar{padding:5px 4px;font-size:11px;margin-top:10px;}
+
+  /* Totals bar */
+  .totals-bar{
+    display:flex;justify-content:center;align-items:center;
+    flex-wrap:nowrap;gap:0;
+    margin:16px auto 0;width:100%;max-width:420px;
+    box-sizing:border-box;
+    background:var(--card);
+    border:1px solid var(--paper-line);
+    border-radius:30px;
+    padding:9px 4px;
+    box-shadow:var(--shadow);
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12.5px;color:var(--ink-soft);
+    transition:padding .18s ease, font-size .18s ease, margin .18s ease;
+  }
+  .totals-bar .stat{
+    display:flex;align-items:baseline;gap:6px;
+    padding:0 18px;white-space:nowrap;
+  }
+  .totals-bar .stat b{color:var(--ink);font-weight:600;}
+  .totals-bar .stat .val{
+    color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums;
+  }
+  .totals-bar{
+    overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
+    scrollbar-width:none;
+  }
+  .totals-bar::-webkit-scrollbar{display:none;}
+  @media (max-width:460px){
+    .totals-bar{
+      width:100%;max-width:100%;border-radius:14px;
+      padding:8px 10px;gap:0;font-size:11px;
+    }
+    .totals-bar .stat{padding:0 10px;gap:4px;}
+  }
+  @media (max-width:360px){
+    .totals-bar{font-size:9.5px;padding:7px 6px;}
+    .totals-bar .stat{padding:0 5px;gap:3px;}
+  }
+  .totals-bar .divider{width:1px;height:14px;background:var(--paper-line);flex-shrink:0;}
+
+  /* Status manager */
+  .status-manager{
+    display:flex;flex-wrap:wrap;align-items:center;gap:8px;
+    margin-bottom:22px;
+  }
+  .sm-label{
+    font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-soft);
+    text-transform:uppercase;letter-spacing:.08em;margin-right:2px;
+  }
+  .status-chip{
+    display:inline-flex;align-items:center;gap:6px;
+    border-radius:20px;padding:5px 6px 5px 12px;
+    font-size:12.5px;font-weight:600;
+  }
+  .status-chip button{
+    border:none;background:rgba(0,0,0,.08);color:inherit;border-radius:50%;
+    width:16px;height:16px;line-height:1;cursor:pointer;font-size:10px;
+    opacity:.6;display:flex;align-items:center;justify-content:center;
+  }
+  .status-chip button:hover{opacity:1;}
+  .add-status-btn{
+    font-family:'IBM Plex Mono',monospace;font-size:12px;
+    border:1px dashed var(--paper-line);background:none;border-radius:20px;
+    padding:6px 14px;color:var(--ink-soft);cursor:pointer;
+  }
+  .add-status-btn:hover{border-color:var(--gold);color:var(--amber);}
+
+  /* Person sections */
+  #peopleWrap{
+    display:grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap:16px;
+    align-items:start;
+  }
+  .person{
+    background:var(--card);
+    border-radius:14px;
+    box-shadow:var(--shadow);
+    overflow:hidden;
+    min-width:0;
+    transition:opacity .15s ease, outline-color .15s ease;
+  }
+  .person[data-person="shared"]{
+    border:1px solid var(--gold);
+  }
+  .person.dragging{opacity:.4;}
+  .person.drag-over{outline:3px dashed var(--gold);outline-offset:-3px;}
+  .person-head{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:16px 20px;gap:10px;
+    background:var(--ink);
+    color:var(--paper);
+  }
+  .person-head h2{
+    font-family:'Fraunces',serif;font-weight:600;font-size:19px;margin:0;
+    display:flex;align-items:center;gap:8px;flex:1;min-width:0;
+  }
+  .label-edit{
+    outline:none;min-width:0;flex:1;
+    white-space:normal;word-break:break-word;overflow-wrap:anywhere;
+    padding:2px 4px;border-radius:4px;cursor:text;line-height:1.25;
+  }
+  .label-edit:focus{background:rgba(255,255,255,.1);box-shadow:0 0 0 1px rgba(255,255,255,.25);}
+  .col-drag{
+    color:rgba(251,248,242,.45);flex-shrink:0;font-size:15px;opacity:1;
+  }
+  .col-drag:hover{color:rgba(251,248,242,.9);opacity:1;}
+  .stamp{
+    flex-shrink:0;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:10px;letter-spacing:.1em;
+    border:1px solid rgba(251,248,242,.4);
+    border-radius:20px;padding:3px 10px;
+    text-transform:uppercase;opacity:.8;
+  }
+  .person-body{padding:6px 18px 16px;}
+
+  /* Income row */
+  .income-block{
+    display:flex;flex-wrap:wrap;gap:8px;
+    padding:14px 0 10px;border-bottom:1px dashed var(--paper-line);
+    margin-bottom:6px;
+  }
+  .income-chip{
+    display:flex;align-items:center;gap:5px;
+    background:var(--sage-bg);border-radius:8px;padding:6px 10px;
+    transition:background .12s;
+  }
+  .income-chip.dragging{opacity:.35;}
+  .income-chip.drag-over{outline:2px dashed var(--sage);outline-offset:-2px;}
+  .income-chip input.name{
+    border:none;background:transparent;font-size:12.5px;font-weight:600;
+    color:var(--sage);width:auto;min-width:44px;flex-shrink:1;font-family:'Inter',sans-serif;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .income-chip .amt-wrap{display:flex;align-items:center;gap:3px;flex-shrink:0;}
+  .income-chip .amt-wrap .rm{
+    font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--ink-soft);opacity:.7;
+  }
+  .income-chip input.amt{
+    border:none;background:transparent;font-family:'IBM Plex Mono',monospace;
+    font-size:13px;color:var(--ink);width:9ch;min-width:66px;text-align:right;
+  }
+  .income-chip .del{opacity:.35;cursor:pointer;font-size:12px;border:none;background:none;padding:0 2px;}
+  .income-chip .del:hover{opacity:.9;}
+  .add-income{
+    font-family:'IBM Plex Mono',monospace;font-size:12px;
+    border:1px dashed var(--paper-line);background:none;border-radius:8px;
+    padding:6px 10px;color:var(--ink-soft);cursor:pointer;
+  }
+  .add-income:hover{border-color:var(--sage);color:var(--sage);}
+
+  /* Category */
+  .category{border-bottom:1px solid var(--paper-line);border-radius:8px;transition:background .12s;}
+  .category:last-child{border-bottom:none;}
+  .category.dragging{opacity:.35;}
+  .category.drag-over{background:var(--amber-bg);outline:2px dashed var(--amber);outline-offset:-2px;}
+  .cat-head{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:12px 4px;cursor:pointer;
+    user-select:none;gap:8px;
+  }
+  .cat-head .left{display:flex;align-items:flex-start;gap:8px;min-width:0;flex:1;}
+  .caret{
+    font-size:10px;color:var(--ink-soft);
+    transition:transform .18s;display:inline-block;flex-shrink:0;
+    margin-top:3px;
+  }
+  .cat-head.open .caret{transform:rotate(90deg);}
+  .cat-name{
+    border:none;background:transparent;font-weight:600;font-size:14.5px;
+    color:var(--ink);font-family:'Inter',sans-serif;min-width:0;flex:1;
+    white-space:normal;word-break:break-word;overflow-wrap:anywhere;
+    outline:none;padding:2px 3px;border-radius:4px;cursor:text;line-height:1.35;
+  }
+  .cat-name:focus{background:#F7F4EC;box-shadow:0 0 0 1px var(--paper-line);}
+  .cat-right{display:flex;align-items:center;gap:10px;flex-shrink:0;}
+  .cat-total{
+    font-family:'IBM Plex Mono',monospace;font-size:14px;
+    color:var(--ink-soft);flex-shrink:0;white-space:nowrap;
+    padding-top:2px;
+  }
+  .cat-del{
+    border:none;background:none;cursor:pointer;font-size:13px;
+    color:var(--brick);opacity:.3;flex-shrink:0;padding:2px;
+  }
+  .cat-del:hover{opacity:1;}
+  .cat-items{
+    display:none;
+    padding:0 4px 10px 22px;
+  }
+  .cat-items.open{display:block;}
+
+  .item-row{
+    display:flex;flex-direction:column;gap:5px;
+    padding:8px 8px;
+    border-radius:8px;
+    transition:background .12s;
+    max-width:100%;
+  }
+  .item-row:hover{background:#F7F4EC;}
+  .item-row.dragging{opacity:.35;}
+  .item-row.drag-over{background:var(--sage-bg);outline:2px dashed var(--sage);outline-offset:-2px;}
+  .item-row input, .item-row select{
+    border:none;background:transparent;font-family:'Inter',sans-serif;
+    font-size:13px;color:var(--ink);padding:3px 2px;min-width:0;
+  }
+  .item-row .row-main{display:flex;align-items:center;gap:6px;}
+  .item-row .row-main .name{
+    flex:1;min-width:0;font-weight:500;width:auto;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .item-row .row-sub{
+    display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+    padding-left:22px;
+  }
+  .item-row select.status-pill{width:auto;flex-shrink:0;}
+  .item-row .amt-wrap{
+    display:flex;align-items:center;gap:3px;flex-shrink:0;margin-left:auto;
+  }
+  .item-row .amt-wrap .rm{
+    font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--ink-soft);opacity:.65;
+  }
+  .item-row input.amt{font-family:'IBM Plex Mono',monospace;text-align:right;width:8ch;min-width:64px;}
+  .item-row input.due, .item-row input.payto{
+    color:var(--ink-soft);font-size:11.5px;background:transparent;border:none;
+    padding:1px 2px;flex:1 1 70px;min-width:50px;width:auto;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .item-row .del{
+    opacity:.3;border:none;background:none;cursor:pointer;font-size:13px;
+    color:var(--brick);flex-shrink:0;
+  }
+  .item-row .del:hover{opacity:1;}
+  .col-label{display:none;}
+  .drag-handle{
+    cursor:grab;color:var(--ink-soft);opacity:.32;font-size:13px;
+    text-align:center;user-select:none;line-height:1;padding:2px 0;
+  }
+  .drag-handle:hover{opacity:.85;}
+  .drag-handle:active{cursor:grabbing;}
+
+  .status-pill{
+    border-radius:20px;padding:4px 8px;font-size:11.5px;font-weight:600;
+    border:none;text-align:center;cursor:pointer;
+    font-family:'Inter',sans-serif;
+  }
+  /* status colors are now applied inline via statusStyle() / STATUS_PALETTE */
+
+  .add-item{
+    margin:6px 8px 0;
+    font-family:'IBM Plex Mono',monospace;font-size:11.5px;
+    border:none;background:none;color:var(--ink-soft);cursor:pointer;
+    padding:4px 2px;
+  }
+  .add-item:hover{color:var(--sage);}
+
+  .add-category{
+    margin:10px 4px 4px;
+    font-family:'IBM Plex Mono',monospace;font-size:12px;
+    border:1px dashed var(--paper-line);background:none;border-radius:8px;
+    padding:7px 12px;color:var(--ink-soft);cursor:pointer;
+  }
+  .add-category:hover{border-color:var(--gold);color:var(--amber);}
+
+  /* Covered-by chip for shared section */
+  .covered-toggle{
+    display:flex;border-radius:20px;overflow:hidden;border:1px solid var(--paper-line);
+    font-family:'IBM Plex Mono',monospace;font-size:10.5px;flex-shrink:0;
+  }
+  .covered-toggle button{
+    border:none;background:var(--card);padding:4px 8px;cursor:pointer;color:var(--ink-soft);
+  }
+  .covered-toggle button.active{background:var(--navy-tab);color:var(--paper);}
+
+  .footnote{
+    text-align:center;font-size:12px;color:var(--ink-soft);
+    margin-top:26px;font-family:'IBM Plex Mono',monospace;
+    line-height:1.7;
+  }
+  .footnote b{color:var(--ink);}
+
+  ::selection{background:var(--gold);color:var(--ink);}
+
+  @media (max-width:420px){
+    .item-row select.status-pill{font-size:10px;padding:3px 6px;}
+    .item-row input.amt{width:60px;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="masthead">
+    <div class="title-col">
+      <input class="title-field" id="pageTitle" value="Household Ledger">
+      <div class="sub">salary &amp; monthly commitments — always saved automatically</div>
+    </div>
+    <div class="masthead-actions">
+      <input class="month-field" id="monthLabel" value="July 2026">
+      <button class="io-btn" id="exportBtn" title="Download your data as a .json file — save it in OneDrive to sync across devices">⬇ Export</button>
+      <button class="io-btn" id="importBtn" title="Import a previously exported .json file">⬆ Import</button>
+      <input type="file" id="importFile" accept="application/json,.json" style="display:none">
+      <div class="save-indicator"><span class="save-dot" id="saveDot"></span><span id="saveText">saved</span></div>
+    </div>
+  </div>
+
+  <div class="sticky-header" id="stickyHeader">
+    <div class="summary" id="summary"></div>
+    <div class="totals-bar" id="totalsBar"></div>
+  </div>
+
+  <div class="status-manager" id="statusManager"></div>
+
+  <div id="peopleWrap"></div>
+
+  <div class="footnote" id="footnote"></div>
+
+</div>
+
+<script>
+/* ---------- data model ---------- */
+const uid = () => Math.random().toString(36).slice(2,9);
+
+const defaultData = () => ({
+  wife: {
+    label: "Ummi",
+    income: [
+      {id:uid(), name:"Salary", amount:4664.57},
+      {id:uid(), name:"On Call", amount:1720},
+    ],
+    categories: [
+      {id:uid(), name:"Protection", open:false, items:[
+        {id:uid(), name:"Medical Card", amount:195, due:"", payTo:"App HLMT", status:"Paid"},
+        {id:uid(), name:"AIA Hibah - 1 Million", amount:101.32, due:"", payTo:"CC Hong Leong", status:"Paid"},
+      ]},
+      {id:uid(), name:"Fixed Monthly Commitments", open:false, items:[
+        {id:uid(), name:"MyXOX", amount:37.10, due:"", payTo:"Apps MyXox", status:"Paid"},
+        {id:uid(), name:"Mara", amount:350, due:"", payTo:"Mara", status:"Paid"},
+        {id:uid(), name:"Coffee Club House Hospital", amount:40, due:"", payTo:"Ambank", status:"Paid"},
+        {id:uid(), name:"Adhoc Hospital", amount:50, due:"", payTo:"Ambank", status:"Paid"},
+        {id:uid(), name:"Myvi", amount:571, due:"", payTo:"Bank Muamalat", status:"Paid"},
+        {id:uid(), name:"Petrol Myvi", amount:150, due:"", payTo:"Aeon Pot Abg", status:"Paid"},
+        {id:uid(), name:"Toll", amount:50, due:"", payTo:"Aeon Pot Abg", status:"Paid"},
+        {id:uid(), name:"Myvi Service Fund", amount:100, due:"", payTo:"Public Bank", status:"Pending"},
+        {id:uid(), name:"Myvi Tyre/Battery Fund", amount:50, due:"", payTo:"Public Bank", status:"Pending"},
+        {id:uid(), name:"RoadTax & Insurance Fund", amount:150, due:"", payTo:"Aeon Pot Abg", status:"Paid"},
+      ]},
+      {id:uid(), name:"Installment Shopping", open:false, items:[
+        {id:uid(), name:"Stethoscope", amount:45.23, due:"Dec 2026", payTo:"Aeon Pot Abg > Shopee", status:"Paid"},
+        {id:uid(), name:"Laptop", amount:63.24, due:"Dec 2027", payTo:"Aeon Pot > Shopee", status:"Paid"},
+        {id:uid(), name:"Fridge - Wife", amount:68.22, due:"Jul 2027", payTo:"Aeon Pot Abg > Shopee", status:"Paid"},
+        {id:uid(), name:"Langsir", amount:67, due:"", payTo:"Aeon Pot Abg CC CIMB", status:"Transferred"},
+        {id:uid(), name:"TT Items", amount:87.49, due:"", payTo:"CC Hong Leong", status:"Paid"},
+      ]},
+      {id:uid(), name:"Food", open:false, items:[
+        {id:uid(), name:"Daily Food", amount:500, due:"", payTo:"Maybank & Public Bank", status:"Paid"},
+        {id:uid(), name:"On-call Food", amount:350, due:"", payTo:"Public Bank", status:"Paid"},
+      ]},
+      {id:uid(), name:"Gifts", open:false, items:[
+        {id:uid(), name:"Ibu", amount:100, due:"", payTo:"Oncall > Public Bank > Ibu", status:"Transferred"},
+        {id:uid(), name:"Ayah", amount:100, due:"", payTo:"Oncall > Public Bank > Ayah", status:"Transferred"},
+        {id:uid(), name:"PIL", amount:200, due:"", payTo:"Oncall > Aeon Pot Abg", status:"Paid"},
+      ]},
+    ]
+  },
+  adli: {
+    label: "Ayah",
+    income: [
+      {id:uid(), name:"Salary", amount:4858.12},
+      {id:uid(), name:"AIA", amount:1000},
+    ],
+    categories: [
+      {id:uid(), name:"Protection", open:false, items:[
+        {id:uid(), name:"Medical Card", amount:170, due:"17th", payTo:"HLMT", status:"Paid"},
+        {id:uid(), name:"Death Hibah", amount:82, due:"28th", payTo:"CC CIMB", status:"Transferred"},
+        {id:uid(), name:"Hibah Critical Illness", amount:51.14, due:"3rd next month", payTo:"CC CIMB", status:"Transferred"},
+      ]},
+      {id:uid(), name:"Fixed Monthly Commitments", open:false, items:[
+        {id:uid(), name:"Coway", amount:66, due:"1st next month", payTo:"CC HSBC Amanah", status:"Pending"},
+        {id:uid(), name:"Bezza", amount:460, due:"5th next month", payTo:"BSN", status:"Paid"},
+        {id:uid(), name:"Petrol Bezza", amount:250, due:"30th", payTo:"Aeon Pot", status:"Paid"},
+        {id:uid(), name:"Toll", amount:150, due:"30th", payTo:"Aeon Pot", status:"Paid"},
+        {id:uid(), name:"Bezza Service Fund", amount:50, due:"30th", payTo:"Aeon Pot", status:"Pending"},
+      ]},
+      {id:uid(), name:"Installment Shopping", open:false, items:[
+        {id:uid(), name:"Kipas Cosa", amount:11.95, due:"Jun 2027", payTo:"Aeon Pot > Shopee", status:"Paid"},
+        {id:uid(), name:"Rak Sinki", amount:15.56, due:"Jun 2027", payTo:"Aeon Pot > Shopee", status:"Paid"},
+        {id:uid(), name:"Fridge - Adli", amount:68.22, due:"Jul 2027", payTo:"Aeon Pot > Shopee", status:"Paid"},
+        {id:uid(), name:"Aircond Master", amount:84.37, due:"May 2028", payTo:"Aeon Pot > Shopee", status:"Paid"},
+      ]},
+      {id:uid(), name:"Food", open:false, items:[
+        {id:uid(), name:"Breakfast", amount:100, due:"30th", payTo:"Aeon Pot", status:"Pending"},
+        {id:uid(), name:"Family Dining Out", amount:200, due:"", payTo:"Aeon Pot", status:"Pending"},
+      ]},
+      {id:uid(), name:"Gifts", open:false, items:[
+        {id:uid(), name:"Mak", amount:75, due:"30th", payTo:"Aeon Pot > RHB Mak", status:"Paid"},
+        {id:uid(), name:"Ayah", amount:75, due:"30th", payTo:"Aeon Pot > RHB Mak", status:"Paid"},
+      ]},
+    ]
+  },
+  shared: {
+    label: "Kids & Household",
+    groups: [
+      {id:uid(), name:"Layth", open:false, items:[
+        {id:uid(), name:"Medical Card", amount:118.5, due:"", payTo:"Aeon Pot Adli", status:"Transferred", coveredBy:"wife"},
+        {id:uid(), name:"Brainy Bunch", amount:335, due:"", payTo:"Aeon Pot Adli", status:"Paid", coveredBy:"wife"},
+      ]},
+      {id:uid(), name:"Amru", open:false, items:[
+        {id:uid(), name:"Medical Card", amount:118.5, due:"", payTo:"Aeon Pot Adli", status:"Transferred", coveredBy:"adli"},
+        {id:uid(), name:"Brainy Bunch", amount:335, due:"", payTo:"Aeon Pot Adli", status:"Paid", coveredBy:"adli"},
+        {id:uid(), name:"AKE", amount:400, due:"", payTo:"Aeon Pot Adli", status:"Paid", coveredBy:"wife"},
+      ]},
+      {id:uid(), name:"Subscription", open:false, items:[
+        {id:uid(), name:"iCloud", amount:45.35, due:"", payTo:"Aeon Pot Adli > CC CIMB", status:"Transferred", coveredBy:"wife"},
+        {id:uid(), name:"Capcut", amount:38.28, due:"", payTo:"Aeon Pot Adli > CC CIMB", status:"Transferred", coveredBy:"wife"},
+        {id:uid(), name:"Canva", amount:30.20, due:"", payTo:"Aeon Pot Adli > CC CIMB", status:"Transferred", coveredBy:"wife"},
+        {id:uid(), name:"Adobe", amount:43.17, due:"", payTo:"Aeon Pot Adli > CC CIMB", status:"Transferred", coveredBy:"wife"},
+        {id:uid(), name:"Youtube", amount:21.11, due:"", payTo:"Aeon Pot Adli > CC CIMB", status:"Transferred", coveredBy:"wife"},
+        {id:uid(), name:"Microsoft", amount:44.44, due:"", payTo:"Aeon Pot Adli > CC CIMB", status:"Transferred", coveredBy:"wife"},
+        {id:uid(), name:"Spotify Nadli Mak", amount:12.30, due:"", payTo:"Bank Islam Adli", status:"Paid", coveredBy:"wife"},
+      ]},
+      {id:uid(), name:"Household", open:false, items:[
+        {id:uid(), name:"Water Bill", amount:14.6, due:"", payTo:"Aeon Pot Adli", status:"Paid", coveredBy:"adli"},
+        {id:uid(), name:"Electricity Bill", amount:260, due:"", payTo:"Aeon Pot Adli", status:"Transferred", coveredBy:"adli"},
+        {id:uid(), name:"Home Financing/Rent", amount:1200, due:"", payTo:"Aeon Pot Bil Utility", status:"Transferred", coveredBy:"adli"},
+        {id:uid(), name:"Household Items", amount:500, due:"", payTo:"Aeon Pot Adli", status:"Transferred", coveredBy:"adli"},
+      ]},
+      {id:uid(), name:"Adhoc", open:false, items:[
+        {id:uid(), name:"Khatam - Baju Eaya", amount:47.61, due:"Jan 2027", payTo:"CC CIMB", status:"Transferred", coveredBy:"adli"},
+        {id:uid(), name:"Cabinet", amount:35, due:"", payTo:"Aeon Pot Kabinet > Mak", status:"Transferred", coveredBy:"adli"},
+      ]},
+    ]
+  },
+  statusOptions: ["Paid","Transferred","Pending"],
+  columnOrder: ["wife","shared","adli"],
+});
+
+let state = null;
+const STORAGE_KEY = "duit-rumah-v1";
+
+/* ---------- persistence (browser localStorage — works standalone, no Claude needed) ---------- */
+function loadState(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw) return JSON.parse(raw);
+  }catch(e){ console.error(e); }
+  return null;
+}
+let saveTimer=null;
+function scheduleSave(){
+  const dot = document.getElementById('saveDot');
+  const txt = document.getElementById('saveText');
+  dot.style.opacity = '0.25';
+  txt.textContent = 'saving…';
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(()=>{
+    try{
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      dot.style.opacity='1';
+      txt.textContent='saved on this device';
+    }catch(e){
+      txt.textContent='save failed';
+      console.error(e);
+    }
+  }, 400);
+}
+
+/* ---------- export / import (manual sync via OneDrive, Google Drive, email, etc.) ---------- */
+function exportData(){
+  const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const today = new Date().toISOString().slice(0,10);
+  a.href = url;
+  a.download = `household-ledger-${today}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function importData(file){
+  const reader = new FileReader();
+  reader.onload = e=>{
+    try{
+      const parsed = JSON.parse(e.target.result);
+      if(!parsed || !parsed.wife || !parsed.adli || !parsed.shared){
+        alert('This file isn\'t valid — not a Household Ledger export file.');
+        return;
+      }
+      if(!confirm('This will REPLACE all current data with the data from this file. Continue?')) return;
+      state = parsed;
+      if(!state.statusOptions) state.statusOptions = ["Paid","Transferred","Pending"];
+      if(!state.columnOrder || !Array.isArray(state.columnOrder) || state.columnOrder.length!==3) state.columnOrder = ["wife","shared","adli"];
+      document.getElementById('monthLabel').value = state.monthLabel || '';
+      document.getElementById('pageTitle').value = state.title || 'Household Ledger';
+      document.title = state.title || 'Household Ledger';
+      render();
+      alert('Data imported successfully.');
+    }catch(err){
+      alert("Couldn't read this file. Make sure it's a .json file exported from Household Ledger.");
+      console.error(err);
+    }
+  };
+  reader.readAsText(file);
+}
+
+/* ---------- helpers ---------- */
+const money = n => (isFinite(n)?n:0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
+const num = v => { if(typeof v !== 'string') return isFinite(v)?v:0; const n = parseFloat(v.replace(/,/g,'').trim()); return isFinite(n)?n:0; };
+
+function sumItems(items){ return items.reduce((s,i)=>s+num(i.amount),0); }
+
+function calcTotals(){
+  const wifeCatTotal = state.wife.categories.reduce((s,c)=>s+sumItems(c.items),0);
+  const adliCatTotal = state.adli.categories.reduce((s,c)=>s+sumItems(c.items),0);
+  let wifeSharedTotal=0, adliSharedTotal=0;
+  state.shared.groups.forEach(g=>g.items.forEach(it=>{
+    if(it.coveredBy==='wife') wifeSharedTotal+=num(it.amount);
+    else adliSharedTotal+=num(it.amount);
+  }));
+  const wifeIncome = sumItems(state.wife.income);
+  const adliIncome = sumItems(state.adli.income);
+  const wifeCommit = wifeCatTotal+wifeSharedTotal;
+  const adliCommit = adliCatTotal+adliSharedTotal;
+  return {
+    wifeIncome, adliIncome,
+    wifeCommit, adliCommit,
+    wifeBalance: wifeIncome-wifeCommit,
+    adliBalance: adliIncome-adliCommit,
+    sharedTotal: wifeSharedTotal+adliSharedTotal,
+  };
+}
+
+/* ---------- render ---------- */
+function render(){
+  renderSummary();
+  renderTotalsBar();
+  renderStatusManager();
+  renderPeople();
+  renderFootnote();
+  scheduleSave();
+}
+
+function renderTotalsBar(){
+  const t = calcTotals();
+  const el = document.getElementById('totalsBar');
+  const totalIncome = t.wifeIncome + t.adliIncome;
+  const totalCommit = t.wifeCommit + t.adliCommit;
+  el.innerHTML = `
+    <span class="stat"><b>Income</b><span class="val">RM ${money(totalIncome)}</span></span>
+    <span class="divider"></span>
+    <span class="stat"><b>Commitments</b><span class="val">RM ${money(totalCommit)}</span></span>
+  `;
+}
+
+function renderFootnote(){
+  const el = document.getElementById('footnote');
+  el.innerHTML = `
+    All numbers are calculated automatically from each entry below. Tap any field to edit directly.<br>
+    Items in <b>${escapeHtml(state.shared.label)}</b> are added to ${escapeHtml(state.wife.label)}'s or ${escapeHtml(state.adli.label)}'s total, depending on who it's covered by.
+  `;
+}
+
+function renderStatusManager(){
+  const el = document.getElementById('statusManager');
+  el.innerHTML = `
+    <span class="sm-label">Status list</span>
+    ${state.statusOptions.map((s,i)=>{
+      const c = statusColor(i);
+      return `<span class="status-chip" style="background:${c.bg};color:${c.fg};">${escapeHtml(s)}<button data-status="${escapeHtml(s)}" title="Delete status">✕</button></span>`;
+    }).join('')}
+    <button class="add-status-btn" id="addStatusBtn">+ Add status</button>
+  `;
+  el.querySelectorAll('.status-chip button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const name = btn.dataset.status;
+      if(state.statusOptions.length<=1){ alert('You need at least one status.'); return; }
+      if(isStatusInUse(name)){ alert(`The status "${name}" is still used on one or more items. Change those items' status first before deleting.`); return; }
+      state.statusOptions = state.statusOptions.filter(s=>s!==name);
+      render();
+    });
+  });
+  document.getElementById('addStatusBtn').addEventListener('click', ()=>{
+    const name = (prompt('New status name:')||'').trim();
+    if(!name) return;
+    if(state.statusOptions.includes(name)){ alert('This status already exists.'); return; }
+    state.statusOptions.push(name);
+    render();
+  });
+}
+
+function renderSummary(){
+  const t = calcTotals();
+  const el = document.getElementById('summary');
+  const cards = {
+    wife: `
+      <div class="sum-card">
+        <div class="who">${escapeHtml(state.wife.label)}'s Balance</div>
+        <div class="amt ${t.wifeBalance<0?'neg':''}">RM ${money(t.wifeBalance)}</div>
+        <div class="breakdown"><span>Income RM ${money(t.wifeIncome)}</span><span>Commitments RM ${money(t.wifeCommit)}</span></div>
+      </div>`,
+    shared: `
+      <div class="sum-card household">
+        <div class="who">Total Household Balance</div>
+        <div class="amt ${(t.wifeBalance+t.adliBalance)<0?'neg':''}">RM ${money(t.wifeBalance+t.adliBalance)}</div>
+        <div class="breakdown"><span>Joint commitments RM ${money(t.sharedTotal)}</span><span>${escapeHtml(state.monthLabel||'')}</span></div>
+      </div>`,
+    adli: `
+      <div class="sum-card">
+        <div class="who">${escapeHtml(state.adli.label)}'s Balance</div>
+        <div class="amt ${t.adliBalance<0?'neg':''}">RM ${money(t.adliBalance)}</div>
+        <div class="breakdown"><span>Income RM ${money(t.adliIncome)}</span><span>Commitments RM ${money(t.adliCommit)}</span></div>
+      </div>`,
+  };
+  el.innerHTML = state.columnOrder.map(key=>cards[key]).join('');
+}
+
+const STATUS_PALETTE = [
+  {bg:'#E8F0E6', fg:'#5F8863'}, // sage — default: Paid
+  {bg:'#FBF0DC', fg:'#B8842E'}, // amber — default: Transferred
+  {bg:'#F7E7E2', fg:'#B0503F'}, // brick — default: Pending
+  {bg:'#E4ECF7', fg:'#3B5A8A'}, // blue
+  {bg:'#F0E6F5', fg:'#7A4E96'}, // purple
+  {bg:'#E9ECEA', fg:'#4B5A55'}, // slate
+];
+function statusColor(idx){ return STATUS_PALETTE[((idx%STATUS_PALETTE.length)+STATUS_PALETTE.length)%STATUS_PALETTE.length]; }
+function statusStyle(name){
+  let idx = state.statusOptions.indexOf(name);
+  if(idx<0) idx = 0;
+  const c = statusColor(idx);
+  return `background:${c.bg};color:${c.fg};`;
+}
+function statusOptions(current){
+  return state.statusOptions.map(s=>`<option value="${escapeHtml(s)}" ${s===current?'selected':''}>${escapeHtml(s)}</option>`).join('');
+}
+function isStatusInUse(name){
+  const usesIt = items => items.some(it=>it.status===name);
+  if(state.wife.categories.some(c=>usesIt(c.items))) return true;
+  if(state.adli.categories.some(c=>usesIt(c.items))) return true;
+  if(state.shared.groups.some(g=>usesIt(g.items))) return true;
+  return false;
+}
+
+function renderPeople(){
+  const wrap = document.getElementById('peopleWrap');
+  wrap.innerHTML = state.columnOrder.map((key, idx)=>{
+    return key==='shared' ? sharedHTML(idx) : personHTML(key, idx);
+  }).join('');
+  attachEvents();
+}
+
+function itemRowHTML(personKey, catId, item, idx){
+  const listKey = `items:${personKey}:${catId}`;
+  return `
+  <div class="item-row" data-drag-row data-list="${listKey}" data-index="${idx}" data-person="${personKey}" data-cat="${catId}" data-item="${item.id}">
+    <div class="row-main">
+      <span class="drag-handle" draggable="true" data-list="${listKey}" data-index="${idx}" title="Drag to reorder">⠿</span>
+      <input class="name" value="${escapeHtml(item.name)}" data-field="name" placeholder="item name">
+      <button class="del" data-action="delItem" title="Delete">✕</button>
+    </div>
+    <div class="row-sub">
+      <select class="status-pill" style="${statusStyle(item.status)}" data-field="status">${statusOptions(item.status)}</select>
+      <input class="due" value="${escapeHtml(item.due||'')}" data-field="due" placeholder="due date">
+      <input class="payto" value="${escapeHtml(item.payTo||'')}" data-field="payTo" placeholder="pay to">
+      <span class="amt-wrap"><span class="rm">RM</span><input class="amt" type="text" inputmode="decimal" value="${money(item.amount)}" data-field="amount"></span>
+    </div>
+  </div>`;
+}
+
+function categoryHTML(personKey, cat, idx){
+  const total = sumItems(cat.items);
+  const listKey = `${personKey}-categories`;
+  return `
+  <div class="category" data-drag-row data-list="${listKey}" data-index="${idx}" data-cat="${cat.id}">
+    <div class="cat-head ${cat.open?'open':''}" data-action="toggleCat" data-cat="${cat.id}">
+      <div class="left">
+        <span class="drag-handle" draggable="true" data-list="${listKey}" data-index="${idx}" title="Drag to reorder" onclick="event.stopPropagation()">⠿</span>
+        <span class="caret">▸</span>
+        <div class="cat-name" contenteditable="true" data-field="catName" data-cat="${cat.id}" onclick="event.stopPropagation()">${escapeHtml(cat.name)}</div>
+      </div>
+      <div class="cat-right">
+        <div class="cat-total">RM ${money(total)}</div>
+        <button class="cat-del" data-action="delCategory" data-cat="${cat.id}" title="Delete this category" onclick="event.stopPropagation()">✕</button>
+      </div>
+    </div>
+    <div class="cat-items ${cat.open?'open':''}">
+      ${cat.items.map((it,i)=>itemRowHTML(personKey, cat.id, it, i)).join('')}
+      <button class="add-item" data-action="addItem" data-cat="${cat.id}">+ Add item</button>
+    </div>
+  </div>`;
+}
+
+function personHTML(personKey, colIdx){
+  const p = state[personKey];
+  const totals = calcTotals();
+  const balance = personKey==='wife'?totals.wifeBalance:totals.adliBalance;
+  const incomeListKey = `${personKey}-income`;
+  return `
+  <div class="person" data-person="${personKey}" data-drag-row data-list="columns" data-index="${colIdx}">
+    <div class="person-head">
+      <span class="drag-handle col-drag" draggable="true" data-list="columns" data-index="${colIdx}" title="Drag to reorder columns">⠿</span>
+      <h2><div contenteditable="true" data-field="personLabel" data-person="${personKey}" class="label-edit">${escapeHtml(p.label)}</div></h2>
+      <span class="stamp">Balance RM ${money(balance)}</span>
+    </div>
+    <div class="person-body">
+      <div class="income-block">
+        ${p.income.map((inc,idx)=>`
+          <div class="income-chip" data-drag-row data-list="${incomeListKey}" data-index="${idx}" data-person="${personKey}" data-income="${inc.id}">
+            <span class="drag-handle" draggable="true" data-list="${incomeListKey}" data-index="${idx}" title="Drag to reorder">⠿</span>
+            <input class="name" value="${escapeHtml(inc.name)}" data-field="incName">
+            <span class="amt-wrap"><span class="rm">RM</span><input class="amt" type="text" inputmode="decimal" value="${money(inc.amount)}" data-field="incAmount"></span>
+            <button class="del" data-action="delIncome" title="Delete">✕</button>
+          </div>`).join('')}
+        <button class="add-income" data-action="addIncome" data-person="${personKey}">+ Income source</button>
+      </div>
+      ${p.categories.map((cat,idx)=>categoryHTML(personKey, cat, idx)).join('')}
+      <button class="add-category" data-action="addCategory" data-person="${personKey}">+ Add category</button>
+    </div>
+  </div>`;
+}
+
+function sharedHTML(colIdx){
+  const s = state.shared;
+  return `
+  <div class="person" data-person="shared" data-drag-row data-list="columns" data-index="${colIdx}">
+    <div class="person-head">
+      <span class="drag-handle col-drag" draggable="true" data-list="columns" data-index="${colIdx}" title="Drag to reorder columns">⠿</span>
+      <h2><div contenteditable="true" data-field="sharedLabel" class="label-edit">${escapeHtml(s.label)}</div></h2>
+      <span class="stamp" id="sharedStamp">shared by ${escapeHtml(state.wife.label)} / ${escapeHtml(state.adli.label)}</span>
+    </div>
+    <div class="person-body">
+      ${s.groups.map((g,gIdx)=>{
+        const total = sumItems(g.items);
+        const listKey = 'shared-groups';
+        const itemsListKey = `items:shared:${g.id}`;
+        return `
+        <div class="category" data-drag-row data-list="${listKey}" data-index="${gIdx}" data-cat="${g.id}">
+          <div class="cat-head ${g.open?'open':''}" data-action="toggleCat" data-cat="${g.id}">
+            <div class="left">
+              <span class="drag-handle" draggable="true" data-list="${listKey}" data-index="${gIdx}" title="Drag to reorder" onclick="event.stopPropagation()">⠿</span>
+              <span class="caret">▸</span>
+              <div class="cat-name" contenteditable="true" data-field="catName" data-cat="${g.id}" onclick="event.stopPropagation()">${escapeHtml(g.name)}</div>
+            </div>
+            <div class="cat-right">
+              <div class="cat-total">RM ${money(total)}</div>
+              <button class="cat-del" data-action="delGroup" data-cat="${g.id}" title="Delete this group" onclick="event.stopPropagation()">✕</button>
+            </div>
+          </div>
+          <div class="cat-items ${g.open?'open':''}">
+            ${g.items.map((it,iIdx)=>`
+              <div class="item-row" data-drag-row data-list="${itemsListKey}" data-index="${iIdx}" data-cat="${g.id}" data-item="${it.id}">
+                <div class="row-main">
+                  <span class="drag-handle" draggable="true" data-list="${itemsListKey}" data-index="${iIdx}" title="Drag to reorder">⠿</span>
+                  <input class="name" value="${escapeHtml(it.name)}" data-field="name" placeholder="item name">
+                  <button class="del" data-action="delSharedItem" data-cat="${g.id}" data-item="${it.id}" title="Delete">✕</button>
+                </div>
+                <div class="row-sub">
+                  <select class="status-pill" style="${statusStyle(it.status)}" data-field="status">${statusOptions(it.status)}</select>
+                  <input class="payto" value="${escapeHtml(it.payTo||'')}" data-field="payTo" placeholder="pay to">
+                  <div class="covered-toggle" data-cat="${g.id}" data-item="${it.id}">
+                    <button data-cover="wife" class="${it.coveredBy==='wife'?'active':''}">${escapeHtml(state.wife.label)}</button>
+                    <button data-cover="adli" class="${it.coveredBy==='adli'?'active':''}">${escapeHtml(state.adli.label)}</button>
+                  </div>
+                  <span class="amt-wrap"><span class="rm">RM</span><input class="amt" type="text" inputmode="decimal" value="${money(it.amount)}" data-field="amount"></span>
+                </div>
+              </div>`).join('')}
+            <button class="add-item" data-action="addSharedItem" data-cat="${g.id}">+ Add item</button>
+          </div>
+        </div>`;
+      }).join('')}
+      <button class="add-category" data-action="addSharedGroup">+ Add group</button>
+    </div>
+  </div>`;
+}
+
+function escapeHtml(str){
+  return String(str??'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+/* ---------- events ---------- */
+function findCategory(personKey, catId){
+  if(personKey==='shared') return state.shared.groups.find(g=>g.id===catId);
+  return state[personKey].categories.find(c=>c.id===catId);
+}
+
+function attachEvents(){
+  const wrap = document.getElementById('peopleWrap');
+
+  wrap.querySelectorAll('[data-action="toggleCat"]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const catId = el.dataset.cat;
+      const personEl = el.closest('.person');
+      const personKey = personEl.dataset.person;
+      const cat = findCategory(personKey, catId);
+      cat.open = !cat.open;
+      renderPeople();
+    });
+  });
+
+  wrap.querySelectorAll('[data-field="catName"]').forEach(el=>{
+    el.addEventListener('input', ()=>{
+      const catId = el.dataset.cat;
+      const personKey = el.closest('.person').dataset.person;
+      const cat = findCategory(personKey, catId);
+      cat.name = el.textContent;
+      scheduleSave();
+    });
+    el.addEventListener('keydown', e=>{
+      if(e.key==='Enter'){ e.preventDefault(); el.blur(); }
+    });
+  });
+
+  wrap.querySelectorAll('[data-field="personLabel"]').forEach(el=>{
+    el.addEventListener('input', ()=>{
+      const personKey = el.dataset.person;
+      state[personKey].label = el.textContent;
+      renderSummary();
+      const label = el.textContent || (personKey==='wife'?'Ummi':'Ayah');
+      wrap.querySelectorAll(`.covered-toggle button[data-cover="${personKey}"]`).forEach(btn=>{ btn.textContent = label; });
+      const stampEl = document.getElementById('sharedStamp');
+      if(stampEl) stampEl.textContent = `shared by ${state.wife.label} / ${state.adli.label}`;
+      renderFootnote();
+      scheduleSave();
+    });
+    el.addEventListener('keydown', e=>{
+      if(e.key==='Enter'){ e.preventDefault(); el.blur(); }
+    });
+  });
+
+  wrap.querySelectorAll('[data-field="sharedLabel"]').forEach(el=>{
+    el.addEventListener('input', ()=>{
+      state.shared.label = el.textContent;
+      renderFootnote();
+      scheduleSave();
+    });
+    el.addEventListener('keydown', e=>{
+      if(e.key==='Enter'){ e.preventDefault(); el.blur(); }
+    });
+  });
+
+  // income fields
+  wrap.querySelectorAll('.income-chip').forEach(chip=>{
+    const personKey = chip.dataset.person;
+    const incId = chip.dataset.income;
+    const inc = state[personKey].income.find(i=>i.id===incId);
+    chip.querySelector('[data-field="incName"]').addEventListener('input', e=>{ inc.name=e.target.value; scheduleSave(); });
+    const amtEl = chip.querySelector('[data-field="incAmount"]');
+    amtEl.addEventListener('input', e=>{ inc.amount=num(e.target.value); renderSummary(); scheduleSave(); });
+    amtEl.addEventListener('focus', ()=> amtEl.select());
+    amtEl.addEventListener('blur', ()=>{ amtEl.value = money(inc.amount); });
+    chip.querySelector('[data-action="delIncome"]').addEventListener('click', ()=>{
+      state[personKey].income = state[personKey].income.filter(i=>i.id!==incId);
+      render();
+    });
+  });
+  wrap.querySelectorAll('[data-action="addIncome"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      state[btn.dataset.person].income.push({id:uid(), name:"New source", amount:0});
+      render();
+    });
+  });
+
+  // category items (wife/adli)
+  wrap.querySelectorAll('.item-row[data-item]').forEach(row=>{
+    if(!row.dataset.person) return; // shared handled separately
+    const personKey = row.dataset.person;
+    const catId = row.dataset.cat;
+    const itemId = row.dataset.item;
+    const cat = findCategory(personKey, catId);
+    const item = cat.items.find(i=>i.id===itemId);
+    row.querySelectorAll('[data-field]').forEach(inputEl=>{
+      const field = inputEl.dataset.field;
+      inputEl.addEventListener('input', ()=>{
+        item[field] = field==='amount' ? num(inputEl.value) : inputEl.value;
+        if(field==='amount'){ renderSummary(); updateCatTotal(personKey, catId); scheduleSave(); }
+        else scheduleSave();
+      });
+      if(field==='status'){
+        inputEl.addEventListener('change', ()=>{
+          inputEl.style.cssText = statusStyle(inputEl.value);
+        });
+      }
+      if(field==='amount'){
+        inputEl.addEventListener('focus', ()=> inputEl.select());
+        inputEl.addEventListener('blur', ()=>{ inputEl.value = money(item.amount); });
+      }
+    });
+    row.querySelector('[data-action="delItem"]').addEventListener('click', ()=>{
+      cat.items = cat.items.filter(i=>i.id!==itemId);
+      render();
+    });
+  });
+
+  wrap.querySelectorAll('[data-action="addItem"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const personKey = btn.closest('.person').dataset.person;
+      const cat = findCategory(personKey, btn.dataset.cat);
+      cat.items.push({id:uid(), name:"New item", amount:0, due:"", payTo:"", status:"Pending"});
+      cat.open = true;
+      render();
+    });
+  });
+
+  wrap.querySelectorAll('[data-action="addCategory"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const personKey = btn.dataset.person;
+      state[personKey].categories.push({id:uid(), name:"New category", open:true, items:[]});
+      render();
+    });
+  });
+
+  wrap.querySelectorAll('[data-action="delCategory"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const personEl = btn.closest('.person');
+      const personKey = personEl.dataset.person;
+      const catId = btn.dataset.cat;
+      const cat = state[personKey].categories.find(c=>c.id===catId);
+      const label = cat ? cat.name : 'this category';
+      if(!confirm(`Delete category "${label}" and everything inside it?`)) return;
+      state[personKey].categories = state[personKey].categories.filter(c=>c.id!==catId);
+      render();
+    });
+  });
+
+  // shared groups
+  wrap.querySelectorAll('.person[data-person="shared"] .item-row[data-item]').forEach(row=>{
+    const catId = row.dataset.cat;
+    const itemId = row.dataset.item;
+    const group = state.shared.groups.find(g=>g.id===catId);
+    const item = group.items.find(i=>i.id===itemId);
+    row.querySelectorAll('[data-field]').forEach(inputEl=>{
+      const field = inputEl.dataset.field;
+      inputEl.addEventListener('input', ()=>{
+        item[field] = field==='amount' ? num(inputEl.value) : inputEl.value;
+        if(field==='amount'){ renderSummary(); updateCatTotal('shared', catId); scheduleSave(); }
+        else scheduleSave();
+      });
+      if(field==='status'){
+        inputEl.addEventListener('change', ()=>{ inputEl.style.cssText = statusStyle(inputEl.value); });
+      }
+      if(field==='amount'){
+        inputEl.addEventListener('focus', ()=> inputEl.select());
+        inputEl.addEventListener('blur', ()=>{ inputEl.value = money(item.amount); });
+      }
+    });
+  });
+  wrap.querySelectorAll('.covered-toggle').forEach(tg=>{
+    const group = state.shared.groups.find(g=>g.id===tg.dataset.cat);
+    const item = group.items.find(i=>i.id===tg.dataset.item);
+    tg.querySelectorAll('button').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        item.coveredBy = b.dataset.cover;
+        render();
+      });
+    });
+  });
+  wrap.querySelectorAll('[data-action="delSharedItem"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const group = state.shared.groups.find(g=>g.id===btn.dataset.cat);
+      group.items = group.items.filter(i=>i.id!==btn.dataset.item);
+      render();
+    });
+  });
+  wrap.querySelectorAll('[data-action="addSharedItem"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const group = state.shared.groups.find(g=>g.id===btn.dataset.cat);
+      group.items.push({id:uid(), name:"New item", amount:0, payTo:"", status:"Pending", coveredBy:"wife"});
+      group.open = true;
+      render();
+    });
+  });
+  wrap.querySelectorAll('[data-action="addSharedGroup"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      state.shared.groups.push({id:uid(), name:"New group", open:true, items:[]});
+      render();
+    });
+  });
+
+  wrap.querySelectorAll('[data-action="delGroup"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const catId = btn.dataset.cat;
+      const group = state.shared.groups.find(g=>g.id===catId);
+      const label = group ? group.name : 'this group';
+      if(!confirm(`Delete group "${label}" and everything inside it?`)) return;
+      state.shared.groups = state.shared.groups.filter(g=>g.id!==catId);
+      render();
+    });
+  });
+}
+
+function updateCatTotal(personKey, catId){
+  const cat = findCategory(personKey, catId);
+  const total = sumItems(cat.items);
+  const el = document.querySelector(`.category[data-cat="${catId}"] .cat-total`);
+  if(el) el.textContent = `RM ${money(total)}`;
+}
+
+/* ---------- drag to reorder ---------- */
+function getList(listKey){
+  if(listKey==='columns') return state.columnOrder;
+  if(listKey==='wife-income') return state.wife.income;
+  if(listKey==='adli-income') return state.adli.income;
+  if(listKey==='wife-categories') return state.wife.categories;
+  if(listKey==='adli-categories') return state.adli.categories;
+  if(listKey==='shared-groups') return state.shared.groups;
+  if(listKey.startsWith('items:')){
+    const [,who,id] = listKey.split(':');
+    if(who==='shared'){
+      const g = state.shared.groups.find(g=>g.id===id);
+      return g ? g.items : null;
+    }
+    const cat = state[who].categories.find(c=>c.id===id);
+    return cat ? cat.items : null;
+  }
+  return null;
+}
+
+let dragCtx = null;
+function initDragReorder(){
+  const wrap = document.getElementById('peopleWrap');
+
+  wrap.addEventListener('dragstart', e=>{
+    const handle = e.target.closest('.drag-handle');
+    if(!handle) return;
+    dragCtx = { listKey: handle.dataset.list, index: parseInt(handle.dataset.index,10) };
+    e.dataTransfer.effectAllowed = 'move';
+    try{ e.dataTransfer.setData('text/plain','drag'); }catch(err){}
+    const row = handle.closest('[data-drag-row]');
+    if(row){
+      row.classList.add('dragging');
+      try{ e.dataTransfer.setDragImage(row, 14, 14); }catch(err){}
+    }
+  });
+
+  wrap.addEventListener('dragover', e=>{
+    if(!dragCtx) return;
+    const row = e.target.closest(`[data-drag-row][data-list="${dragCtx.listKey}"]`);
+    if(!row) return;
+    e.preventDefault();
+    row.classList.add('drag-over');
+  });
+
+  wrap.addEventListener('dragleave', e=>{
+    const row = e.target.closest('[data-drag-row]');
+    if(row) row.classList.remove('drag-over');
+  });
+
+  wrap.addEventListener('drop', e=>{
+    if(!dragCtx) return;
+    const row = e.target.closest(`[data-drag-row][data-list="${dragCtx.listKey}"]`);
+    if(row){
+      e.preventDefault();
+      const toIndex = parseInt(row.dataset.index,10);
+      const list = getList(dragCtx.listKey);
+      if(list && toIndex !== dragCtx.index){
+        const [moved] = list.splice(dragCtx.index,1);
+        list.splice(toIndex,0,moved);
+        render();
+      }
+    }
+    dragCtx = null;
+    wrap.querySelectorAll('.dragging,.drag-over').forEach(el=>el.classList.remove('dragging','drag-over'));
+  });
+
+  wrap.addEventListener('dragend', ()=>{
+    dragCtx = null;
+    wrap.querySelectorAll('.dragging,.drag-over').forEach(el=>el.classList.remove('dragging','drag-over'));
+  });
+}
+
+/* ---------- month & title labels ---------- */
+function attachMonthField(){
+  const el = document.getElementById('monthLabel');
+  el.addEventListener('input', ()=>{
+    state.monthLabel = el.value;
+    renderSummary();
+    scheduleSave();
+  });
+}
+function attachTitleField(){
+  const el = document.getElementById('pageTitle');
+  el.addEventListener('input', ()=>{
+    state.title = el.value;
+    document.title = el.value || 'Household Ledger';
+    scheduleSave();
+  });
+}
+
+/* ---------- sticky compact state ---------- */
+function initStickyCompact(){
+  const el = document.getElementById('stickyHeader');
+  const mq = window.matchMedia('(min-width: 769px)');
+  let ticking = false;
+  window.addEventListener('scroll', ()=>{
+    if(ticking) return;
+    ticking = true;
+    requestAnimationFrame(()=>{
+      el.classList.toggle('stuck', mq.matches && window.scrollY > 30);
+      ticking = false;
+    });
+  }, {passive:true});
+  mq.addEventListener('change', ()=>{
+    if(!mq.matches) el.classList.remove('stuck');
+  });
+}
+
+/* ---------- init ---------- */
+(async function init(){
+  const saved = await loadState();
+  state = saved || defaultData();
+  if(!state.monthLabel) state.monthLabel = document.getElementById('monthLabel').value;
+  if(!state.title) state.title = document.getElementById('pageTitle').value;
+  if(!state.statusOptions) state.statusOptions = ["Paid","Transferred","Pending"];
+  if(!state.columnOrder || !Array.isArray(state.columnOrder) || state.columnOrder.length!==3) state.columnOrder = ["wife","shared","adli"];
+  document.getElementById('monthLabel').value = state.monthLabel;
+  document.getElementById('pageTitle').value = state.title;
+  document.title = state.title || 'Household Ledger';
+  attachMonthField();
+  attachTitleField();
+  initDragReorder();
+  initStickyCompact();
+  document.getElementById('exportBtn').addEventListener('click', exportData);
+  document.getElementById('importBtn').addEventListener('click', ()=>{
+    document.getElementById('importFile').click();
+  });
+  document.getElementById('importFile').addEventListener('change', e=>{
+    const file = e.target.files[0];
+    if(file) importData(file);
+    e.target.value = '';
+  });
+  render();
+})();
+</script>
+</body>
+</html>
