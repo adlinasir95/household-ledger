@@ -36,7 +36,7 @@
     font-family:'Inter',sans-serif;
     padding:28px 16px 80px;
   }
-  .wrap{max-width:1080px;margin:0 auto;}
+  .wrap{max-width:min(1600px, 94vw);margin:0 auto;}
 
   /* Header */
   .masthead{
@@ -256,13 +256,17 @@
 
   /* Person sections */
   #peopleWrap{
-    display:grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    display:flex;
+    flex-wrap:wrap;
     gap:16px;
     align-items:start;
   }
+  #peopleWrap > .person{
+    flex:1 1 300px;
+    min-width:0;
+  }
   @media (max-width:900px){
-    #peopleWrap{grid-template-columns: 1fr;}
+    #peopleWrap > .person{flex:1 1 100%;}
   }
   .person{
     background:var(--card);
@@ -285,7 +289,7 @@
   }
   .person-head h2{
     font-family:'Fraunces',serif;font-weight:600;font-size:19px;margin:0;
-    display:flex;align-items:center;gap:8px;flex:1;min-width:0;
+    display:flex;align-items:center;gap:8px;flex:1 1 auto;min-width:80px;
   }
   .label-edit{
     outline:none;min-width:0;flex:1;
@@ -298,7 +302,7 @@
   }
   .col-drag:hover{color:rgba(251,248,242,.9);opacity:1;}
   .stamp{
-    flex-shrink:1;min-width:0;
+    flex-shrink:1;flex-grow:0;min-width:0;max-width:55%;
     font-family:'IBM Plex Mono',monospace;
     font-size:10px;letter-spacing:.1em;line-height:1.5;
     border:1px solid rgba(251,248,242,.4);
@@ -412,12 +416,27 @@
   }
   .item-row select.status-pill{width:auto;flex-shrink:0;}
   .item-row .amt-wrap{
-    display:flex;align-items:center;gap:3px;flex-shrink:0;margin-left:auto;
+    display:flex;align-items:center;gap:3px;flex-shrink:0;
   }
   .item-row .amt-wrap .rm{
     font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--ink-soft);opacity:.65;
   }
-  .item-row input.amt{font-family:'IBM Plex Mono',monospace;text-align:right;width:8ch;min-width:64px;}
+  .item-row input.amt{font-family:'IBM Plex Mono',monospace;text-align:right;width:8ch;min-width:60px;}
+  .item-row .pay-row{padding-left:22px;margin-top:5px;}
+  .item-row .pay-bar{
+    height:4px;border-radius:2px;background:var(--paper-line);overflow:hidden;margin-bottom:5px;max-width:260px;
+  }
+  .item-row .pay-bar-fill{
+    height:100%;background:var(--sage);border-radius:2px;transition:width .2s ease;
+  }
+  .item-row .pay-bar-fill.over{background:var(--amber);}
+  .item-row .pay-values{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+  .item-row .pay-field{display:flex;align-items:baseline;gap:3px;}
+  .item-row .pf-label{
+    font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--ink-soft);
+    text-transform:uppercase;letter-spacing:.04em;opacity:.7;flex-shrink:0;
+  }
+  .item-row .pay-sep{color:var(--paper-line);font-size:12px;flex-shrink:0;}
   .item-row input.due, .item-row input.payto{
     color:var(--ink-soft);font-size:11.5px;background:transparent;border:none;
     padding:1px 2px;flex:1 1 70px;min-width:50px;width:auto;
@@ -658,7 +677,7 @@ function findFreshStatus(){
 function regenerateIds(monthData){
   const fresh = cloneDeep(monthData);
   const freshStatus = findFreshStatus();
-  const resetItem = it => { it.id = uid(); it.status = freshStatus; };
+  const resetItem = it => { it.id = uid(); it.status = freshStatus; it.paid = 0; };
   ['wife','adli'].forEach(who=>{
     fresh[who].income.forEach(inc=>{ inc.id = uid(); });
     fresh[who].categories.forEach(cat=>{ cat.id = uid(); cat.items.forEach(resetItem); });
@@ -752,6 +771,20 @@ function ensureStateDefaults(s){
   if(!s.monthOrder || !Array.isArray(s.monthOrder) || !s.monthOrder.length) s.monthOrder = [s.currentMonth];
   if(!s.months) s.months = {};
   if(!s.months[s.currentMonth]) s.months[s.currentMonth] = { wife: s.wife, adli: s.adli, shared: s.shared };
+  // backfill "paid" on any items saved before this feature existed (every month, not just current)
+  const backfillItem = it => {
+    if(it.paid===undefined) it.paid = /paid|transferred/i.test(it.status||'') ? num(it.amount) : 0;
+  };
+  Object.values(s.months).forEach(m=>{
+    ['wife','adli'].forEach(who=>{
+      (m[who]?.categories||[]).forEach(cat=>(cat.items||[]).forEach(backfillItem));
+    });
+    (m.shared?.groups||[]).forEach(g=>(g.items||[]).forEach(backfillItem));
+  });
+  if(s.months[s.currentMonth]){
+    const cur = cloneDeep(s.months[s.currentMonth]);
+    s.wife = cur.wife; s.adli = cur.adli; s.shared = cur.shared;
+  }
   return s;
 }
 
@@ -1115,6 +1148,7 @@ const money = n => (isFinite(n)?n:0).toLocaleString('en-MY',{minimumFractionDigi
 const num = v => { if(typeof v !== 'string') return isFinite(v)?v:0; const n = parseFloat(v.replace(/,/g,'').trim()); return isFinite(n)?n:0; };
 
 function sumItems(items){ return items.reduce((s,i)=>s+num(i.amount),0); }
+function sumPaid(items){ return items.reduce((s,i)=>s+num(i.paid),0); }
 
 function calcTotals(){
   const wifeCatTotal = state.wife.categories.reduce((s,c)=>s+sumItems(c.items),0);
@@ -1258,6 +1292,9 @@ function renderPeople(){
 
 function itemRowHTML(personKey, catId, item, idx){
   const listKey = `items:${personKey}:${catId}`;
+  const alloc = num(item.amount), paid = num(item.paid);
+  const pct = alloc>0 ? Math.min(100, (paid/alloc)*100) : (paid>0 ? 100 : 0);
+  const over = alloc>0 && paid>alloc;
   return `
   <div class="item-row" data-drag-row data-list="${listKey}" data-index="${idx}" data-person="${personKey}" data-cat="${catId}" data-item="${item.id}">
     <div class="row-main">
@@ -1269,7 +1306,14 @@ function itemRowHTML(personKey, catId, item, idx){
       <select class="status-pill" style="${statusStyle(item.status)}" data-field="status">${statusOptions(item.status)}</select>
       <input class="due" value="${escapeHtml(item.due||'')}" data-field="due" placeholder="due date">
       <input class="payto" value="${escapeHtml(item.payTo||'')}" data-field="payTo" placeholder="pay to">
-      <span class="amt-wrap"><span class="rm">RM</span><input class="amt" type="text" inputmode="decimal" value="${money(item.amount)}" data-field="amount"></span>
+    </div>
+    <div class="pay-row">
+      <div class="pay-bar"><div class="pay-bar-fill ${over?'over':''}" style="width:${pct}%"></div></div>
+      <div class="pay-values">
+        <span class="pay-field"><span class="pf-label">Paid</span><span class="amt-wrap"><span class="rm">RM</span><input class="amt paid-amt" type="text" inputmode="decimal" value="${money(item.paid)}" data-field="paid"></span></span>
+        <span class="pay-sep">/</span>
+        <span class="pay-field"><span class="pf-label">Allocated</span><span class="amt-wrap"><span class="rm">RM</span><input class="amt" type="text" inputmode="decimal" value="${money(item.amount)}" data-field="amount"></span></span>
+      </div>
     </div>
   </div>`;
 }
@@ -1358,7 +1402,11 @@ function sharedHTML(colIdx){
             </div>
           </div>
           <div class="cat-items ${g.open?'open':''}">
-            ${g.items.map((it,iIdx)=>`
+            ${g.items.map((it,iIdx)=>{
+              const alloc = num(it.amount), paid = num(it.paid);
+              const pct = alloc>0 ? Math.min(100, (paid/alloc)*100) : (paid>0 ? 100 : 0);
+              const over = alloc>0 && paid>alloc;
+              return `
               <div class="item-row" data-drag-row data-list="${itemsListKey}" data-index="${iIdx}" data-cat="${g.id}" data-item="${it.id}">
                 <div class="row-main">
                   <span class="drag-handle" draggable="true" data-list="${itemsListKey}" data-index="${iIdx}" title="Drag to reorder">⠿</span>
@@ -1372,9 +1420,17 @@ function sharedHTML(colIdx){
                     <button data-cover="wife" class="${it.coveredBy==='wife'?'active':''}">${escapeHtml(state.wife.label)}</button>
                     <button data-cover="adli" class="${it.coveredBy==='adli'?'active':''}">${escapeHtml(state.adli.label)}</button>
                   </div>
-                  <span class="amt-wrap"><span class="rm">RM</span><input class="amt" type="text" inputmode="decimal" value="${money(it.amount)}" data-field="amount"></span>
                 </div>
-              </div>`).join('')}
+                <div class="pay-row">
+                  <div class="pay-bar"><div class="pay-bar-fill ${over?'over':''}" style="width:${pct}%"></div></div>
+                  <div class="pay-values">
+                    <span class="pay-field"><span class="pf-label">Paid</span><span class="amt-wrap"><span class="rm">RM</span><input class="amt paid-amt" type="text" inputmode="decimal" value="${money(it.paid)}" data-field="paid"></span></span>
+                    <span class="pay-sep">/</span>
+                    <span class="pay-field"><span class="pf-label">Allocated</span><span class="amt-wrap"><span class="rm">RM</span><input class="amt" type="text" inputmode="decimal" value="${money(it.amount)}" data-field="amount"></span></span>
+                  </div>
+                </div>
+              </div>`;
+            }).join('')}
             <button class="add-item" data-action="addSharedItem" data-cat="${g.id}">+ Add item</button>
           </div>
         </div>`;
@@ -1482,18 +1538,25 @@ function attachEvents(){
     row.querySelectorAll('[data-field]').forEach(inputEl=>{
       const field = inputEl.dataset.field;
       inputEl.addEventListener('input', ()=>{
-        item[field] = field==='amount' ? num(inputEl.value) : inputEl.value;
-        if(field==='amount'){ renderSummary(); updateCatTotal(personKey, catId); scheduleSave(); }
-        else scheduleSave();
+        item[field] = (field==='amount'||field==='paid') ? num(inputEl.value) : inputEl.value;
+        if(field==='amount'||field==='paid'){
+          updatePayRowUI(row, item);
+          if(field==='amount'){ renderSummary(); updateCatTotal(personKey, catId); }
+          scheduleSave();
+        } else scheduleSave();
       });
       if(field==='status'){
         inputEl.addEventListener('change', ()=>{
           inputEl.style.cssText = statusStyle(inputEl.value);
+          applyStatusPaidLogic(item, inputEl.value, row);
         });
       }
-      if(field==='amount'){
+      if(field==='amount'||field==='paid'){
         inputEl.addEventListener('focus', ()=> inputEl.select());
-        inputEl.addEventListener('blur', ()=>{ inputEl.value = money(item.amount); });
+        inputEl.addEventListener('blur', ()=>{
+          inputEl.value = money(item[field]);
+          if(field==='paid') maybeAutoSetPartialStatus(item, row);
+        });
       }
     });
     row.querySelector('[data-action="delItem"]').addEventListener('click', ()=>{
@@ -1506,7 +1569,7 @@ function attachEvents(){
     btn.addEventListener('click', ()=>{
       const personKey = btn.closest('.person').dataset.person;
       const cat = findCategory(personKey, btn.dataset.cat);
-      cat.items.push({id:uid(), name:"New item", amount:0, due:"", payTo:"", status:"Pending"});
+      cat.items.push({id:uid(), name:"New item", amount:0, paid:0, due:"", payTo:"", status:"Pending"});
       cat.open = true;
       render();
     });
@@ -1542,16 +1605,25 @@ function attachEvents(){
     row.querySelectorAll('[data-field]').forEach(inputEl=>{
       const field = inputEl.dataset.field;
       inputEl.addEventListener('input', ()=>{
-        item[field] = field==='amount' ? num(inputEl.value) : inputEl.value;
-        if(field==='amount'){ renderSummary(); updateCatTotal('shared', catId); scheduleSave(); }
-        else scheduleSave();
+        item[field] = (field==='amount'||field==='paid') ? num(inputEl.value) : inputEl.value;
+        if(field==='amount'||field==='paid'){
+          updatePayRowUI(row, item);
+          if(field==='amount'){ renderSummary(); updateCatTotal('shared', catId); }
+          scheduleSave();
+        } else scheduleSave();
       });
       if(field==='status'){
-        inputEl.addEventListener('change', ()=>{ inputEl.style.cssText = statusStyle(inputEl.value); });
+        inputEl.addEventListener('change', ()=>{
+          inputEl.style.cssText = statusStyle(inputEl.value);
+          applyStatusPaidLogic(item, inputEl.value, row);
+        });
       }
-      if(field==='amount'){
+      if(field==='amount'||field==='paid'){
         inputEl.addEventListener('focus', ()=> inputEl.select());
-        inputEl.addEventListener('blur', ()=>{ inputEl.value = money(item.amount); });
+        inputEl.addEventListener('blur', ()=>{
+          inputEl.value = money(item[field]);
+          if(field==='paid') maybeAutoSetPartialStatus(item, row);
+        });
       }
     });
   });
@@ -1575,7 +1647,7 @@ function attachEvents(){
   wrap.querySelectorAll('[data-action="addSharedItem"]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       const group = state.shared.groups.find(g=>g.id===btn.dataset.cat);
-      group.items.push({id:uid(), name:"New item", amount:0, payTo:"", status:"Pending", coveredBy:"wife"});
+      group.items.push({id:uid(), name:"New item", amount:0, paid:0, payTo:"", status:"Pending", coveredBy:"wife"});
       group.open = true;
       render();
     });
@@ -1604,6 +1676,49 @@ function updateCatTotal(personKey, catId){
   const total = sumItems(cat.items);
   const el = document.querySelector(`.category[data-cat="${catId}"] .cat-total`);
   if(el) el.textContent = `RM ${money(total)}`;
+}
+
+function updatePayRowUI(row, item){
+  const alloc = num(item.amount), paid = num(item.paid);
+  const pct = alloc>0 ? Math.min(100, (paid/alloc)*100) : (paid>0 ? 100 : 0);
+  const over = alloc>0 && paid>alloc;
+  const fill = row.querySelector('.pay-bar-fill');
+  if(fill){ fill.style.width = pct+'%'; fill.classList.toggle('over', over); }
+}
+
+function applyStatusPaidLogic(item, newStatus, row){
+  const s = (newStatus||'').trim().toLowerCase();
+  if(s === 'paid'){
+    item.paid = num(item.amount); // fully paid — fill it in for you
+  } else if(s.includes('partial')){
+    // e.g. "Partially Paid" — leave whatever the person typed in Paid alone
+  } else {
+    item.paid = 0; // any other status (Pending, Transferred, etc.) — nothing paid yet
+  }
+  const paidInput = row.querySelector('.paid-amt');
+  if(paidInput) paidInput.value = money(item.paid);
+  updatePayRowUI(row, item);
+  scheduleSave();
+}
+
+function maybeAutoSetPartialStatus(item, row){
+  const alloc = num(item.amount), paid = num(item.paid);
+  if(!(alloc > 0 && paid > 0 && paid < alloc)) return; // only a genuine partial amount triggers this
+  if((item.status||'').toLowerCase().includes('partial')) return; // already set
+
+  let partialStatus = state.statusOptions.find(s => /partial/i.test(s));
+  if(!partialStatus){
+    partialStatus = 'Partially Paid';
+    state.statusOptions.push(partialStatus);
+    renderStatusManager();
+  }
+  item.status = partialStatus;
+  const statusSelect = row.querySelector('select[data-field="status"]');
+  if(statusSelect){
+    statusSelect.innerHTML = statusOptions(item.status);
+    statusSelect.style.cssText = statusStyle(item.status);
+  }
+  scheduleSave();
 }
 
 /* ---------- drag to reorder ---------- */
