@@ -420,7 +420,7 @@
   .cat-name:focus{background:rgba(0,0,0,.08);box-shadow:0 0 0 1px rgba(0,0,0,.15);}
   .cat-right{display:flex;align-items:center;gap:10px;flex-shrink:0;}
   .cat-total{
-    font-family:'IBM Plex Mono',monospace;font-size:14px;
+    font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:700;
     color:var(--cat-fg, var(--ink-soft));flex-shrink:0;white-space:nowrap;
     padding-top:2px;opacity:.95;
   }
@@ -1556,6 +1556,7 @@ function sharedHTML(colIdx){
                 </div>
                 <div class="row-sub">
                   <select class="status-pill" style="${statusStyle(it.status)}" data-field="status">${statusOptions(it.status)}</select>
+                  <input class="due" type="date" value="${it.due||''}" data-field="due">
                   <input class="payto" value="${escapeHtml(it.payTo||'')}" data-field="payTo" placeholder="pay to">
                   <div class="covered-toggle" data-cat="${g.id}" data-item="${it.id}">
                     <button data-cover="wife" class="${it.coveredBy==='wife'?'active':''}">${escapeHtml(state.wife.label)}</button>
@@ -1791,6 +1792,12 @@ function attachEvents(){
         inputEl.addEventListener('change', ()=>{
           inputEl.style.cssText = statusStyle(inputEl.value);
           applyStatusPaidLogic(item, inputEl.value, row);
+        });
+      }
+      if(field==='due'){
+        inputEl.addEventListener('change', ()=>{
+          sortItemsByDueDate(group.items);
+          render();
         });
       }
       if(field==='amount'||field==='paid'){
