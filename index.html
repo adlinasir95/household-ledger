@@ -1713,7 +1713,8 @@ function attachEvents(){
         item[field] = (field==='amount'||field==='paid') ? num(inputEl.value) : inputEl.value;
         if(field==='amount'||field==='paid'){
           updatePayRowUI(row, item);
-          if(field==='amount'){ renderSummary(); updateCatTotal(personKey, catId); }
+          renderSummary();
+          if(field==='amount'){ updateCatTotal(personKey, catId); }
           scheduleSave();
         } else scheduleSave();
       });
@@ -1786,7 +1787,8 @@ function attachEvents(){
         item[field] = (field==='amount'||field==='paid') ? num(inputEl.value) : inputEl.value;
         if(field==='amount'||field==='paid'){
           updatePayRowUI(row, item);
-          if(field==='amount'){ renderSummary(); updateCatTotal('shared', catId); }
+          renderSummary();
+          if(field==='amount'){ updateCatTotal('shared', catId); }
           scheduleSave();
         } else scheduleSave();
       });
@@ -1882,6 +1884,7 @@ function applyStatusPaidLogic(item, newStatus, row){
   const paidInput = row.querySelector('.paid-amt');
   if(paidInput) paidInput.value = money(item.paid);
   updatePayRowUI(row, item);
+  renderSummary();
   scheduleSave();
 }
 
