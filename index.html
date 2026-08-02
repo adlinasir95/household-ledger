@@ -1255,6 +1255,11 @@ function calcTotals(){
 }
 
 /* ---------- render ---------- */
+function refreshTotals(){
+  renderSummary();
+  renderTotalsBar();
+}
+
 function render(){
   renderSummary();
   renderTotalsBar();
@@ -1617,7 +1622,7 @@ function attachEvents(){
       const txt = contrastTextColor(el.value);
       head.style.background = el.value;
       head.style.color = txt;
-      renderSummary();
+      refreshTotals();
       scheduleSave();
     });
   });
@@ -1664,7 +1669,7 @@ function attachEvents(){
     el.addEventListener('input', ()=>{
       const personKey = el.dataset.person;
       state[personKey].label = el.textContent;
-      renderSummary();
+      refreshTotals();
       const label = el.textContent || (personKey==='wife'?'Ummi':'Ayah');
       wrap.querySelectorAll(`.covered-toggle button[data-cover="${personKey}"]`).forEach(btn=>{ btn.textContent = label; });
       const stampEl = document.getElementById('sharedStamp');
@@ -1695,7 +1700,7 @@ function attachEvents(){
     const inc = state[personKey].income.find(i=>i.id===incId);
     chip.querySelector('[data-field="incName"]').addEventListener('input', e=>{ inc.name=e.target.value; scheduleSave(); });
     const amtEl = chip.querySelector('[data-field="incAmount"]');
-    amtEl.addEventListener('input', e=>{ inc.amount=num(e.target.value); renderSummary(); scheduleSave(); });
+    amtEl.addEventListener('input', e=>{ inc.amount=num(e.target.value); refreshTotals(); scheduleSave(); });
     amtEl.addEventListener('focus', ()=> amtEl.select());
     amtEl.addEventListener('blur', ()=>{ amtEl.value = money(inc.amount); });
     chip.querySelector('[data-action="delIncome"]').addEventListener('click', ()=>{
@@ -1724,7 +1729,7 @@ function attachEvents(){
         item[field] = (field==='amount'||field==='paid') ? num(inputEl.value) : inputEl.value;
         if(field==='amount'||field==='paid'){
           updatePayRowUI(row, item);
-          renderSummary();
+          refreshTotals();
           if(field==='amount'){ updateCatTotal(personKey, catId); }
           scheduleSave();
         } else scheduleSave();
@@ -1801,7 +1806,7 @@ function attachEvents(){
         item[field] = (field==='amount'||field==='paid') ? num(inputEl.value) : inputEl.value;
         if(field==='amount'||field==='paid'){
           updatePayRowUI(row, item);
-          renderSummary();
+          refreshTotals();
           if(field==='amount'){ updateCatTotal('shared', catId); }
           scheduleSave();
         } else scheduleSave();
@@ -1919,7 +1924,7 @@ function applyStatusPaidLogic(item, newStatus, row){
   const paidInput = row.querySelector('.paid-amt');
   if(paidInput) paidInput.value = money(item.paid);
   updatePayRowUI(row, item);
-  renderSummary();
+  refreshTotals();
   scheduleSave();
   if(checkAutoCollapseFromRow(row)) render();
 }
@@ -2070,7 +2075,6 @@ function initDragReorder(){
             migrateSingleItem(moved, dragCtx.listKey, toListKey);
           }
           toList.splice(toIndex,0,moved);
-          renderSummary();
           render();
         }
       }
