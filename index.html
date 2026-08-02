@@ -86,6 +86,8 @@
     padding:8px 12px;color:var(--ink-soft);cursor:pointer;white-space:nowrap;
   }
   .io-btn:hover{border-color:var(--gold);color:var(--amber);}
+  .month-icon-btn{padding:8px 10px;font-size:13px;}
+  .month-icon-btn.danger:hover{border-color:var(--brick);color:var(--brick);}
   .ms-btn{
     background:var(--ink);color:var(--paper);border-color:var(--ink);
   }
@@ -314,26 +316,28 @@
     margin-bottom:6px;
   }
   .income-chip{
-    display:flex;align-items:center;gap:5px;
-    background:var(--sage-bg);border-radius:8px;padding:6px 10px;
-    transition:background .12s;
+    display:flex;flex-direction:column;gap:4px;
+    background:var(--sage-bg);border-radius:8px;padding:7px 10px;
+    transition:background .12s;min-width:140px;
   }
   .income-chip.dragging{opacity:.35;}
   .income-chip.drag-over{outline:2px dashed var(--sage);outline-offset:-2px;}
+  .income-chip .row-main{display:flex;align-items:center;gap:5px;}
   .income-chip input.name{
     border:none;background:transparent;font-size:12.5px;font-weight:600;
-    color:var(--sage);width:auto;min-width:44px;flex-shrink:1;font-family:'Inter',sans-serif;
+    color:var(--sage);width:auto;min-width:0;flex:1;font-family:'Inter',sans-serif;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   }
-  .income-chip .amt-wrap{display:flex;align-items:center;gap:3px;flex-shrink:0;}
+  .income-chip .row-sub{display:flex;align-items:center;justify-content:flex-end;padding-left:2px;}
+  .income-chip .amt-wrap{display:flex;align-items:center;gap:4px;flex-shrink:0;}
   .income-chip .amt-wrap .rm{
     font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--ink-soft);opacity:.7;
   }
   .income-chip input.amt{
     border:none;background:transparent;font-family:'IBM Plex Mono',monospace;
-    font-size:13px;color:var(--ink);width:9ch;min-width:66px;text-align:right;
+    font-size:13px;color:var(--ink);width:11ch;min-width:88px;text-align:right;
   }
-  .income-chip .del{opacity:.35;cursor:pointer;font-size:12px;border:none;background:none;padding:0 2px;}
+  .income-chip .del{opacity:.35;cursor:pointer;font-size:12px;border:none;background:none;padding:0 2px;flex-shrink:0;}
   .income-chip .del:hover{opacity:.9;}
   .add-income{
     font-family:'IBM Plex Mono',monospace;font-size:12px;
@@ -490,6 +494,8 @@
     </div>
     <div class="masthead-actions">
       <select class="month-field" id="monthSelect"></select>
+      <button class="io-btn month-icon-btn" id="renameMonthBtn" title="Rename this month">✏️</button>
+      <button class="io-btn month-icon-btn danger" id="deleteMonthBtn" title="Delete this month">🗑️</button>
       <button class="io-btn ms-btn" id="signInBtn" title="Sign in with Microsoft to auto-sync via OneDrive">☁ Sign in with Microsoft</button>
       <span class="sync-status" id="syncStatus"></span>
       <button class="io-btn" id="folderBtn" title="Choose a folder — Export/Import will use it automatically from now on">📁 Set folder</button>
@@ -676,6 +682,41 @@ function switchMonth(newMonth){
     if(!state.monthOrder.includes(newMonth)) state.monthOrder.push(newMonth);
   }
   state.currentMonth = newMonth;
+  render();
+}
+
+function renameCurrentMonth(){
+  const oldName = state.currentMonth;
+  const newName = (prompt('Rename this month:', oldName) || '').trim();
+  if(!newName || newName === oldName) return;
+  if(state.months[newName]){
+    alert(`"${newName}" already exists. Pick a different name.`);
+    return;
+  }
+  // make sure the live data is captured under the old key first, then move it
+  state.months[oldName] = { wife: state.wife, adli: state.adli, shared: state.shared };
+  state.months[newName] = state.months[oldName];
+  delete state.months[oldName];
+  const idx = state.monthOrder.indexOf(oldName);
+  if(idx >= 0) state.monthOrder[idx] = newName; else state.monthOrder.push(newName);
+  state.currentMonth = newName;
+  render();
+}
+
+function deleteCurrentMonth(){
+  if(state.monthOrder.length <= 1){
+    alert("You need at least one month — can't delete the last one.");
+    return;
+  }
+  const name = state.currentMonth;
+  if(!confirm(`Delete "${name}" and everything in it? This can't be undone.`)) return;
+  const idx = state.monthOrder.indexOf(name);
+  state.monthOrder.splice(idx, 1);
+  delete state.months[name];
+  const nextMonth = state.monthOrder[Math.max(0, idx - 1)] || state.monthOrder[0];
+  const snap = cloneDeep(state.months[nextMonth]);
+  state.wife = snap.wife; state.adli = snap.adli; state.shared = snap.shared;
+  state.currentMonth = nextMonth;
   render();
 }
 
@@ -1272,10 +1313,14 @@ function personHTML(personKey, colIdx){
       <div class="income-block">
         ${p.income.map((inc,idx)=>`
           <div class="income-chip" data-drag-row data-list="${incomeListKey}" data-index="${idx}" data-person="${personKey}" data-income="${inc.id}">
-            <span class="drag-handle" draggable="true" data-list="${incomeListKey}" data-index="${idx}" title="Drag to reorder">⠿</span>
-            <input class="name" value="${escapeHtml(inc.name)}" data-field="incName">
-            <span class="amt-wrap"><span class="rm">RM</span><input class="amt" type="text" inputmode="decimal" value="${money(inc.amount)}" data-field="incAmount"></span>
-            <button class="del" data-action="delIncome" title="Delete">✕</button>
+            <div class="row-main">
+              <span class="drag-handle" draggable="true" data-list="${incomeListKey}" data-index="${idx}" title="Drag to reorder">⠿</span>
+              <input class="name" value="${escapeHtml(inc.name)}" data-field="incName">
+              <button class="del" data-action="delIncome" title="Delete">✕</button>
+            </div>
+            <div class="row-sub">
+              <span class="amt-wrap"><span class="rm">RM</span><input class="amt" type="text" inputmode="decimal" value="${money(inc.amount)}" data-field="incAmount"></span>
+            </div>
           </div>`).join('')}
         <button class="add-income" data-action="addIncome" data-person="${personKey}">+ Income source</button>
       </div>
@@ -1670,6 +1715,8 @@ function initStickyCompact(){
   document.title = state.title || 'Household Ledger';
   attachTitleField();
   attachMonthSelect();
+  document.getElementById('renameMonthBtn').addEventListener('click', renameCurrentMonth);
+  document.getElementById('deleteMonthBtn').addEventListener('click', deleteCurrentMonth);
   initDragReorder();
   initStickyCompact();
   initOneDrive();
