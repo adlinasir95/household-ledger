@@ -1734,7 +1734,10 @@ function attachEvents(){
         inputEl.addEventListener('focus', ()=> inputEl.select());
         inputEl.addEventListener('blur', ()=>{
           inputEl.value = money(item[field]);
-          if(field==='paid') syncStatusFromPaidAmount(item, row);
+          if(field==='paid'){
+            syncStatusFromPaidAmount(item, row);
+            if(checkAutoCollapseFromRow(row)) render();
+          }
         });
       }
     });
@@ -1808,7 +1811,10 @@ function attachEvents(){
         inputEl.addEventListener('focus', ()=> inputEl.select());
         inputEl.addEventListener('blur', ()=>{
           inputEl.value = money(item[field]);
-          if(field==='paid') syncStatusFromPaidAmount(item, row);
+          if(field==='paid'){
+            syncStatusFromPaidAmount(item, row);
+            if(checkAutoCollapseFromRow(row)) render();
+          }
         });
       }
     });
@@ -1872,6 +1878,24 @@ function updatePayRowUI(row, item){
   if(fill){ fill.style.width = pct+'%'; fill.classList.toggle('over', over); }
 }
 
+function isFullyPaid(items){
+  return items.length > 0 && items.every(it => num(it.paid) >= num(it.amount));
+}
+function maybeAutoCollapse(cat){
+  if(cat && cat.open && isFullyPaid(cat.items)){
+    cat.open = false;
+    return true;
+  }
+  return false;
+}
+function checkAutoCollapseFromRow(row){
+  const catEl = row.closest('.category');
+  const personEl = row.closest('.person');
+  if(!catEl || !personEl) return false;
+  const cat = findCategory(personEl.dataset.person, catEl.dataset.cat);
+  return maybeAutoCollapse(cat);
+}
+
 function applyStatusPaidLogic(item, newStatus, row){
   const s = (newStatus||'').trim().toLowerCase();
   if(s === 'paid'){
@@ -1886,6 +1910,7 @@ function applyStatusPaidLogic(item, newStatus, row){
   updatePayRowUI(row, item);
   renderSummary();
   scheduleSave();
+  if(checkAutoCollapseFromRow(row)) render();
 }
 
 function updateStatusSelectUI(row, item){
