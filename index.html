@@ -1945,6 +1945,41 @@ function getList(listKey){
 }
 
 let dragCtx = null;
+const CATEGORY_FAMILY = ['wife-categories','adli-categories','shared-groups'];
+function listFamily(listKey){
+  if(CATEGORY_FAMILY.includes(listKey)) return 'categories';
+  if(listKey.startsWith('items:')) return 'items'; // any category's/group's items can now move to any other, any column
+  return null;
+}
+function migrateSingleItem(item, fromListKey, toListKey){
+  const fromPerson = fromListKey.split(':')[1];
+  const toPerson = toListKey.split(':')[1];
+  const toShared = toPerson === 'shared';
+  const fromShared = fromPerson === 'shared';
+  if(toShared && !fromShared){
+    if(!item.coveredBy) item.coveredBy = fromPerson;
+  }
+  if(!toShared && fromShared){
+    delete item.coveredBy;
+  }
+}
+function listsCompatible(a, b){
+  if(a === b) return true;
+  const fa = listFamily(a), fb = listFamily(b);
+  return fa !== null && fa === fb;
+}
+function migrateCategoryItems(cat, fromListKey, toListKey){
+  const goingToShared = toListKey === 'shared-groups';
+  const cameFromShared = fromListKey === 'shared-groups';
+  if(goingToShared && !cameFromShared){
+    const owner = fromListKey === 'wife-categories' ? 'wife' : 'adli';
+    cat.items.forEach(it=>{ if(!it.coveredBy) it.coveredBy = owner; });
+  }
+  if(!goingToShared && cameFromShared){
+    cat.items.forEach(it=>{ delete it.coveredBy; });
+  }
+}
+
 function initDragReorder(){
   const wrap = document.querySelector('.wrap');
 
@@ -1963,8 +1998,8 @@ function initDragReorder(){
 
   wrap.addEventListener('dragover', e=>{
     if(!dragCtx) return;
-    const row = e.target.closest(`[data-drag-row][data-list="${dragCtx.listKey}"]`);
-    if(!row) return;
+    const row = e.target.closest('[data-drag-row]');
+    if(!row || !listsCompatible(row.dataset.list, dragCtx.listKey)) return;
     e.preventDefault();
     row.classList.add('drag-over');
   });
@@ -1976,15 +2011,32 @@ function initDragReorder(){
 
   wrap.addEventListener('drop', e=>{
     if(!dragCtx) return;
-    const row = e.target.closest(`[data-drag-row][data-list="${dragCtx.listKey}"]`);
-    if(row){
+    const row = e.target.closest('[data-drag-row]');
+    if(row && listsCompatible(row.dataset.list, dragCtx.listKey)){
       e.preventDefault();
       const toIndex = parseInt(row.dataset.index,10);
-      const list = getList(dragCtx.listKey);
-      if(list && toIndex !== dragCtx.index){
-        const [moved] = list.splice(dragCtx.index,1);
-        list.splice(toIndex,0,moved);
-        render();
+      const toListKey = row.dataset.list;
+      if(toListKey === dragCtx.listKey){
+        const list = getList(toListKey);
+        if(list && toIndex !== dragCtx.index){
+          const [moved] = list.splice(dragCtx.index,1);
+          list.splice(toIndex,0,moved);
+          render();
+        }
+      } else {
+        const fromList = getList(dragCtx.listKey);
+        const toList = getList(toListKey);
+        if(fromList && toList){
+          const [moved] = fromList.splice(dragCtx.index,1);
+          if(CATEGORY_FAMILY.includes(dragCtx.listKey) || CATEGORY_FAMILY.includes(toListKey)){
+            migrateCategoryItems(moved, dragCtx.listKey, toListKey);
+          } else if(dragCtx.listKey.startsWith('items:') && toListKey.startsWith('items:')){
+            migrateSingleItem(moved, dragCtx.listKey, toListKey);
+          }
+          toList.splice(toIndex,0,moved);
+          renderSummary();
+          render();
+        }
       }
     }
     dragCtx = null;
