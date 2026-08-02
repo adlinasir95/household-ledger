@@ -1557,6 +1557,8 @@ function sharedHTML(colIdx){
                 <div class="row-sub">
                   <select class="status-pill" style="${statusStyle(it.status)}" data-field="status">${statusOptions(it.status)}</select>
                   <input class="due" type="date" value="${it.due||''}" data-field="due">
+                </div>
+                <div class="row-sub">
                   <input class="payto" value="${escapeHtml(it.payTo||'')}" data-field="payTo" placeholder="pay to">
                   <div class="covered-toggle" data-cat="${g.id}" data-item="${it.id}">
                     <button data-cover="wife" class="${it.coveredBy==='wife'?'active':''}">${escapeHtml(state.wife.label)}</button>
